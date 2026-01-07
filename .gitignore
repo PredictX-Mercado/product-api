@@ -1,0 +1,29 @@
+## Build results
+bin/
+obj/
+
+## User-specific files
+.vs/
+*.user
+*.suo
+
+## Logs
+*.log
+
+## VS Code
+.vscode/
+
+## NuGet
+*.nupkg
+packages/
+
+## EF tools
+migrations/obj/
+
+## Configuration
+src/Pruduct.Api/appsettings.json
+src/Pruduct.Api/appsettings.Development.json
+
+## OS
+Thumbs.db
+.DS_Store
