@@ -3,15 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruduct.Api", "src\Pruduct.Api\Pruduct.Api.csproj", "{C643B8AE-5C9B-ADE2-48B1-655ACB9CECC9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Product.Api", "src\Product.Api\Product.Api.csproj", "{C643B8AE-5C9B-ADE2-48B1-655ACB9CECC9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruduct.Business", "src\Pruduct.Business\Pruduct.Business.csproj", "{A28D02A4-2A0A-F621-104A-FD4DEA21B596}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Product.Business", "src\Product.Business\Product.Business.csproj", "{A28D02A4-2A0A-F621-104A-FD4DEA21B596}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruduct.Common", "src\Pruduct.Common\Pruduct.Common.csproj", "{EEA6CDA3-45DA-3483-239F-450B89D6CE66}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Product.Common", "src\Product.Common\Product.Common.csproj", "{EEA6CDA3-45DA-3483-239F-450B89D6CE66}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruduct.Contracts", "src\Pruduct.Contracts\Pruduct.Contracts.csproj", "{89A51042-9783-60A1-490A-33AEFB76DB72}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Product.Contracts", "src\Product.Contracts\Product.Contracts.csproj", "{89A51042-9783-60A1-490A-33AEFB76DB72}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruduct.Data", "src\Pruduct.Data\Pruduct.Data.csproj", "{063DADE2-6559-2E03-DC3C-E38B4EAE78B6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Product.Data", "src\Product.Data\Product.Data.csproj", "{063DADE2-6559-2E03-DC3C-E38B4EAE78B6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject

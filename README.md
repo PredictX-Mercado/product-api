@@ -10,7 +10,7 @@ API em .NET 8 para o back-end do PredictX. Inclui autenticacao com ASP.NET Core 
 
 ## Configuracao rapida
 
-1. Crie/ajuste a string de conexao em `src/Pruduct.Api/appsettings.Development.json` (chave `ConnectionStrings:DefaultConnection`) ou defina a variavel de ambiente `ConnectionStrings__DefaultConnection`.
+1. Crie/ajuste a string de conexao em `src/Product.Api/appsettings.Development.json` (chave `ConnectionStrings:DefaultConnection`) ou defina a variavel de ambiente `ConnectionStrings__DefaultConnection`.
 2. Ajuste `Frontend:BaseUrl` e as expiracoes em `IdentityTokens`.
 3. Configure SMTP em `EmailSettings` e remetente em `Email`.
 4. Opcional: ajuste a lista `Cors:Allow` para os dominios do seu front.
@@ -23,19 +23,19 @@ Na raiz do repo:
 dotnet restore
 
 # aplica migracoes do EF Core usando o projeto de dados como origem de migracoes
-dotnet ef database update --project src/Pruduct.Data --startup-project src/Pruduct.Api
+dotnet ef database update --project src/Product.Data --startup-project src/Product.Api
 
 # executa a API
-dotnet run --project src/Pruduct.Api
+dotnet run --project src/Product.Api
 ```
 
 A API sobe, por padrao, nas portas configuradas no `launchSettings.json` (Kestrel e/ou IIS Express).
 
 ## Estrutura rápida
 
-- `src/Pruduct.Api` – host da API, configuracao de DI, middlewares, Swagger.
-- `src/Pruduct.Business` – regras de negocio, validacoes, servicos.
-- `src/Pruduct.Data` – EF Core com PostgreSQL e migracoes; Dapper para consultas pontuais.
-- `src/Pruduct.Contracts` / `src/Pruduct.Common` – DTOs, enums, entidades base e utilitarios.
+- `src/Product.Api` – host da API, configuracao de DI, middlewares, Swagger.
+- `src/Product.Business` – regras de negocio, validacoes, servicos.
+- `src/Product.Data` – EF Core com PostgreSQL e migracoes; Dapper para consultas pontuais.
+- `src/Product.Contracts` / `src/Product.Common` – DTOs, enums, entidades base e utilitarios.
 
 

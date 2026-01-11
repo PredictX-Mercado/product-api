@@ -21,8 +21,8 @@ packages/
 migrations/obj/
 
 ## Configuration
-src/Pruduct.Api/appsettings.json
-src/Pruduct.Api/appsettings.Development.json
+src/Product.Api/appsettings.json
+src/Product.Api/appsettings.Development.json
 
 ## OS
 Thumbs.db

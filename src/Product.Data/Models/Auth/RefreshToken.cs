@@ -1,0 +1,12 @@
+using Product.Common.Entities;
+
+namespace Product.Data.Models.Auth;
+
+public class RefreshToken : Entity<Guid>
+{
+    public Guid UserId { get; set; }
+    public string TokenHash { get; set; } = default!;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public string? DeviceInfo { get; set; }
+}
