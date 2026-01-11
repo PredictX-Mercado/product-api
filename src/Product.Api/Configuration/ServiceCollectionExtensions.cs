@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using FluentValidation;
@@ -104,6 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWalletService, WalletService>();
         services.AddScoped<IPaymentMethodService, PaymentMethodService>();
         services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IWebhookService, WebhookService>();
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
         // MercadoPago webhook/service
         services.AddHostedService<PersistentEmailBackgroundService>();
@@ -112,19 +115,34 @@ public static class ServiceCollectionExtensions
         ProblemDetailsExtensions.AddProblemDetails(services);
         services.AddSwaggerWithBearer();
 
-        // CORS (corrige o seu erro do "o" fora de contexto)
+        // CORS: permite origens definidas em configuration plus quaisquer subdomínios ngrok (*.ngrok-free.app)
         services.AddCors(o =>
         {
+            var configured = configuration.GetSection("Cors:Allow").Get<string[]>() ?? Array.Empty<string>();
             o.AddPolicy(
                 "Allowlist",
-                p =>
-                    p.WithOrigins(
-                            configuration.GetSection("Cors:Allow").Get<string[]>()
-                                ?? Array.Empty<string>()
-                        )
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials()
+                p => p
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (string.IsNullOrWhiteSpace(origin)) return false;
+                        try
+                        {
+                            // permitir quaisquer subdomínios do ngrok (ex: *.ngrok-free.app)
+                            var host = new Uri(origin).Host;
+                            if (host.EndsWith("ngrok-free.app", StringComparison.OrdinalIgnoreCase))
+                                return true;
+
+                            // permitir origens explicitamente configuradas
+                            return configured.Contains(origin, StringComparer.OrdinalIgnoreCase);
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    })
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials()
             );
         });
 
@@ -240,6 +258,11 @@ public static class ServiceCollectionExtensions
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return Task.CompletedTask;
             };
+            // When using cross-site requests (ngrok front -> ngrok back), ensure cookie
+            // is sent by browser: SameSite=None and Secure are required for modern browsers.
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.None;
+            options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
         });
 
         services.AddAuthorization(options =>

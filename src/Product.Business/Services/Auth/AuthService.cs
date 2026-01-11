@@ -6,6 +6,7 @@ using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Product.Business.Interfaces.Auth;
 using Product.Business.Options;
@@ -26,6 +27,7 @@ public class AuthService : IAuthService
     private readonly IOptions<FrontendOptions> _frontendOptions;
     private readonly IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> _bearerOptions;
     private readonly IOptions<Product.Business.Options.GoogleAuthOptions> _googleOptions;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         UserManager<User> userManager,
@@ -35,7 +37,8 @@ public class AuthService : IAuthService
         IEmailSender emailSender,
         IOptions<FrontendOptions> frontendOptions,
         IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> bearerOptions,
-        IOptions<Product.Business.Options.GoogleAuthOptions> googleOptions
+        IOptions<Product.Business.Options.GoogleAuthOptions> googleOptions,
+        ILogger<AuthService> logger
     )
     {
         _userManager = userManager;
@@ -46,6 +49,7 @@ public class AuthService : IAuthService
         _frontendOptions = frontendOptions;
         _bearerOptions = bearerOptions;
         _googleOptions = googleOptions;
+        _logger = logger;
     }
 
     public async Task<bool> HasExternalLoginAsync(
@@ -464,7 +468,27 @@ public class AuthService : IAuthService
     {
         var user = await _userManager.GetUserAsync(principal);
         if (user is null)
+        {
+            try
+            {
+                var isAuth = principal?.Identity?.IsAuthenticated ?? false;
+                _logger?.LogWarning("GetInfoAsync: principal.IsAuthenticated={IsAuth}", isAuth);
+                var nameId = principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                _logger?.LogWarning("GetInfoAsync: Claim NameIdentifier={NameId}", nameId ?? "(null)");
+                var claims = principal?.Claims?.Select(c => new { c.Type, c.Value }).ToList();
+                if (claims != null && claims.Count > 0)
+                    _logger?.LogWarning("GetInfoAsync: Claims={Claims}", System.Text.Json.JsonSerializer.Serialize(claims));
+                else
+                    _logger?.LogWarning("GetInfoAsync: No claims present on principal");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error while logging principal info");
+            }
+
             throw new UnauthorizedAccessException("invalid_token");
+        }
+
         return new InfoResponse { Email = user.Email, IsEmailConfirmed = user.EmailConfirmed };
     }
 

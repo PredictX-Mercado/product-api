@@ -17,5 +17,16 @@ public interface IOrderService
         CancellationToken ct = default
     );
 
-    Task<Order?> UpdateStatusAsync(string externalOrderId, string status, long? providerPaymentId, CancellationToken ct = default);
+    Task<Order?> UpdateStatusAsync(
+        string externalOrderId,
+        string status,
+        long? providerPaymentId,
+        CancellationToken ct = default
+    );
+
+    Task<Order?> UpdateStatusByProviderIdAsync(
+        long providerPaymentId,
+        string status,
+        CancellationToken ct = default
+    );
 }

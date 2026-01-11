@@ -4,7 +4,8 @@ public record CreatePixRequest(
     decimal Amount,
     string Description,
     string OrderId,
-    string BuyerEmail
+    string BuyerEmail,
+    int? ExpirationMinutes = null
 );
 
 public record CreateCardRequest(
@@ -41,5 +42,6 @@ public record PaymentStatusResponse(
     string Status,
     string? StatusDetail,
     string? ExternalReference,
-    decimal? Amount
+    decimal? Amount,
+    DateTimeOffset? ExpiresAt
 );

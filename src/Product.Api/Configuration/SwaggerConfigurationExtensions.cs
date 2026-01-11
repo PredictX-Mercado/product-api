@@ -19,16 +19,17 @@ public static class SwaggerConfigurationExtensions
                 Description = "Insira o bearer token no formato: Bearer {token}",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.Http,
-                Scheme = BearerTokenDefaults.AuthenticationScheme,
-                BearerFormat = "Opaque",
+                Scheme = "bearer",
+                BearerFormat = "JWT",
                 Reference = new OpenApiReference
                 {
                     Type = ReferenceType.SecurityScheme,
-                    Id = BearerTokenDefaults.AuthenticationScheme,
+                    Id = "Bearer",
                 },
             };
 
-            c.AddSecurityDefinition(BearerTokenDefaults.AuthenticationScheme, securityScheme);
+            // Use a conventional 'Bearer' definition id so Swagger UI recognizes the scheme
+            c.AddSecurityDefinition("Bearer", securityScheme);
             c.AddSecurityRequirement(
                 new OpenApiSecurityRequirement { { securityScheme, new List<string>() } }
             );

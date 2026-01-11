@@ -1,15 +1,16 @@
+using System.Collections.Generic;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Product.Business.Options;
 using Product.Business.Interfaces.Payments;
+using Product.Business.Options;
 using Product.Contracts.Payments;
 
 namespace Product.Api.Controllers;
 
 [ApiController]
-[Route("api/payments/mercadopago")]
+[Route("api/v1/payments/mercadopago")]
 public class MercadoPagoCheckoutApiController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -27,10 +28,40 @@ public class MercadoPagoCheckoutApiController : ControllerBase
         _orderService = orderService;
     }
 
+    private static string NormalizeMpStatus(string? mpStatus)
+    {
+        if (string.IsNullOrWhiteSpace(mpStatus))
+            return "unknown";
+
+        var s = mpStatus.Trim().ToLowerInvariant();
+
+        // Map common MercadoPago statuses to simplified set used by frontend
+        return s switch
+        {
+            "approved" => "approved",
+            "authorized" => "approved",
+            "paid" => "approved",
+            "pending" => "pending",
+            "in_process" => "pending",
+            "rejected" => "rejected",
+            "refunded" => "rejected",
+            "cancelled" => "rejected",
+            "cancelled_by_user" => "rejected",
+            _ => mpStatus,
+        };
+    }
+
     private string GetAccessToken()
     {
-        return _opt.MP_ACCESS_TOKEN_TEST
-            ?? throw new InvalidOperationException("MP token não configurado.");
+        var live = _opt.MP_ACCESS_TOKEN_LIVE;
+        if (!string.IsNullOrWhiteSpace(live))
+            return live;
+
+        var test = _opt.MP_ACCESS_TOKEN_TEST;
+        if (!string.IsNullOrWhiteSpace(test))
+            return test;
+
+        throw new InvalidOperationException("MP token não configurado (LIVE ou TEST).");
     }
 
     private HttpClient CreateMpClient()
@@ -49,14 +80,20 @@ public class MercadoPagoCheckoutApiController : ControllerBase
         var client = CreateMpClient();
         client.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
 
-        var payload = new
+        var expires = DateTimeOffset
+            .UtcNow.AddMinutes(15)
+            .ToOffset(TimeSpan.FromHours(-3))
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz");
+
+        var payload = new Dictionary<string, object?>
         {
-            transaction_amount = req.Amount,
-            description = req.Description,
-            payment_method_id = "pix",
-            payer = new { email = req.BuyerEmail },
-            external_reference = req.OrderId,
-            notification_url = _opt.MP_WEBHOOK_URL,
+            ["transaction_amount"] = req.Amount,
+            ["description"] = req.Description,
+            ["payment_method_id"] = "pix",
+            ["payer"] = new { email = req.BuyerEmail },
+            ["external_reference"] = req.OrderId,
+            ["date_of_expiration"] = expires,
+            ["notification_url"] = _opt.MP_WEBHOOK_URL,
         };
 
         var resp = await client.PostAsJsonAsync("https://api.mercadopago.com/v1/payments", payload);
@@ -96,9 +133,20 @@ public class MercadoPagoCheckoutApiController : ControllerBase
         // Persistir Order no DB (status=pending, ProviderPaymentId=paymentId, method=pix)
         try
         {
-            await _orderService.CreateOrUpdateAsync(req.OrderId, req.Amount, "BRL", "mercadopago", paymentId, status ?? "pending", "pix");
+            var normalizedStatus = NormalizeMpStatus(status);
+            await _orderService.CreateOrUpdateAsync(
+                req.OrderId,
+                req.Amount,
+                "BRL",
+                "mercadopago",
+                paymentId,
+                normalizedStatus ?? "pending",
+                "pix"
+            );
         }
-        catch { /* swallow persistence errors to avoid breaking payment flow */ }
+        catch
+        { /* swallow persistence errors to avoid breaking payment flow */
+        }
 
         return Ok(new PixResponse(paymentId, qrBase64, qrCode, expiresAt, status ?? "unknown"));
     }
@@ -133,8 +181,18 @@ public class MercadoPagoCheckoutApiController : ControllerBase
             using var tmp = JsonDocument.Parse(body);
             var root2 = tmp.RootElement;
             var id = root2.GetProperty("id").GetInt64();
-            var st = root2.TryGetProperty("status", out var s2) ? s2.GetString() ?? "pending" : "pending";
-            await _orderService.CreateOrUpdateAsync(req.OrderId, req.Amount, "BRL", "mercadopago", id, st, "card");
+            var st = root2.TryGetProperty("status", out var s2)
+                ? s2.GetString() ?? "pending"
+                : "pending";
+            await _orderService.CreateOrUpdateAsync(
+                req.OrderId,
+                req.Amount,
+                "BRL",
+                "mercadopago",
+                id,
+                st,
+                "card"
+            );
         }
         catch { }
 
@@ -179,8 +237,18 @@ public class MercadoPagoCheckoutApiController : ControllerBase
             using var tmp = JsonDocument.Parse(body);
             var root2 = tmp.RootElement;
             var id = root2.GetProperty("id").GetInt64();
-            var st = root2.TryGetProperty("status", out var s2) ? s2.GetString() ?? "pending" : "pending";
-            await _orderService.CreateOrUpdateAsync(req.OrderId, req.Amount, "BRL", "mercadopago", id, st, "boleto");
+            var st = root2.TryGetProperty("status", out var s2)
+                ? s2.GetString() ?? "pending"
+                : "pending";
+            await _orderService.CreateOrUpdateAsync(
+                req.OrderId,
+                req.Amount,
+                "BRL",
+                "mercadopago",
+                id,
+                st,
+                "boleto"
+            );
         }
         catch { }
 
@@ -209,8 +277,71 @@ public class MercadoPagoCheckoutApiController : ControllerBase
         if (root.TryGetProperty("transaction_amount", out var ta) && ta.TryGetDecimal(out var a))
             amount = a;
 
+        DateTimeOffset? expiresAt = null;
+        if (
+            root.TryGetProperty("date_of_expiration", out var exp)
+            && exp.ValueKind == JsonValueKind.String
+        )
+            if (DateTimeOffset.TryParse(exp.GetString(), out var dt))
+                expiresAt = dt;
+
+        // Normalize MercadoPago status and handle expiration
+        var normalized = NormalizeMpStatus(status);
+
+        // If payment is still pending but already past the declared expiration,
+        // treat it as expired locally and update order status so front stops polling.
+        if (
+            string.Equals(normalized, "pending", StringComparison.OrdinalIgnoreCase)
+            && expiresAt.HasValue
+            && expiresAt.Value <= DateTimeOffset.UtcNow
+        )
+        {
+            normalized = "expired";
+        }
+
+        // If normalized status is final, update order status in our system
+        var isFinal =
+            string.Equals(normalized, "approved", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "rejected", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "expired", StringComparison.OrdinalIgnoreCase);
+
+        if (isFinal)
+        {
+            if (!string.IsNullOrWhiteSpace(ext))
+            {
+                try
+                {
+                    await _orderService.CreateOrUpdateAsync(
+                        ext,
+                        amount ?? 0m,
+                        "BRL",
+                        "mercadopago",
+                        paymentId,
+                        normalized,
+                        "pix"
+                    );
+                }
+                catch { }
+            }
+            else if (paymentId != 0)
+            {
+                try
+                {
+                    await _orderService.UpdateStatusByProviderIdAsync(paymentId, normalized);
+                }
+                catch { }
+            }
+        }
+
         return Ok(
-            new PaymentStatusResponse(paymentId, status ?? "unknown", statusDetail, ext, amount)
+            new PaymentStatusResponse(
+                paymentId,
+                normalized ?? "unknown",
+                statusDetail,
+                ext,
+                amount,
+                expiresAt
+            )
         );
     }
 }

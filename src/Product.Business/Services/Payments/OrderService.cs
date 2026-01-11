@@ -14,7 +14,10 @@ public class OrderService : IOrderService
         _db = db;
     }
 
-    public async Task<Order?> GetByExternalIdAsync(string externalOrderId, CancellationToken ct = default)
+    public async Task<Order?> GetByExternalIdAsync(
+        string externalOrderId,
+        CancellationToken ct = default
+    )
     {
         return await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == externalOrderId, ct);
     }
@@ -41,7 +44,7 @@ public class OrderService : IOrderService
                 Provider = provider,
                 ProviderPaymentId = providerPaymentId,
                 Status = status,
-                PaymentMethod = paymentMethod
+                PaymentMethod = paymentMethod,
             };
             _db.Orders.Add(ord);
             await _db.SaveChangesAsync(ct);
@@ -49,7 +52,8 @@ public class OrderService : IOrderService
         }
 
         // Idempotent update: if already approved, avoid downgrading
-        if (existing.Status == "approved") return existing;
+        if (existing.Status == "approved")
+            return existing;
 
         existing.Amount = amount;
         existing.Currency = currency;
@@ -63,15 +67,46 @@ public class OrderService : IOrderService
         return existing;
     }
 
-    public async Task<Order?> UpdateStatusAsync(string externalOrderId, string status, long? providerPaymentId, CancellationToken ct = default)
+    public async Task<Order?> UpdateStatusAsync(
+        string externalOrderId,
+        string status,
+        long? providerPaymentId,
+        CancellationToken ct = default
+    )
     {
         var existing = await GetByExternalIdAsync(externalOrderId, ct);
-        if (existing is null) return null;
+        if (existing is null)
+            return null;
 
-        if (existing.Status == "approved") return existing;
+        if (existing.Status == "approved")
+            return existing;
 
         existing.Status = status;
-        if (providerPaymentId is not null) existing.ProviderPaymentId = providerPaymentId;
+        if (providerPaymentId is not null)
+            existing.ProviderPaymentId = providerPaymentId;
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return existing;
+    }
+
+    public async Task<Order?> UpdateStatusByProviderIdAsync(
+        long providerPaymentId,
+        string status,
+        CancellationToken ct = default
+    )
+    {
+        var existing = await _db.Orders.FirstOrDefaultAsync(
+            o => o.ProviderPaymentId == providerPaymentId,
+            ct
+        );
+        if (existing is null)
+            return null;
+
+        if (existing.Status == "approved")
+            return existing;
+
+        existing.Status = status;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);

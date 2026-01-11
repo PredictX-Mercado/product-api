@@ -79,6 +79,50 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "MPWebhookEvent",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Provider = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    EventType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
+                    OrderId = table.Column<string>(type: "text", nullable: true),
+                    Payload = table.Column<string>(type: "text", nullable: false),
+                    Headers = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    ReceivedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    Processed = table.Column<bool>(type: "boolean", nullable: false),
+                    ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    AttemptCount = table.Column<int>(type: "integer", nullable: false),
+                    ProcessingResult = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MPWebhookEvent", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Orders",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    OrderId = table.Column<string>(type: "text", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
+                    Provider = table.Column<string>(type: "text", nullable: false),
+                    ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    PaymentMethod = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Orders", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "QueuedEmails",
                 columns: table => new
                 {
@@ -538,6 +582,11 @@ namespace Product.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_MPWebhookEvent_ProviderPaymentId",
+                table: "MPWebhookEvent",
+                column: "ProviderPaymentId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PasswordResetTokens_TokenHash",
                 table: "PasswordResetTokens",
                 column: "TokenHash",
@@ -651,6 +700,12 @@ namespace Product.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "LedgerEntries");
+
+            migrationBuilder.DropTable(
+                name: "MPWebhookEvent");
+
+            migrationBuilder.DropTable(
+                name: "Orders");
 
             migrationBuilder.DropTable(
                 name: "PasswordResetTokens");
