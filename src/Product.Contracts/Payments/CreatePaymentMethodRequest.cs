@@ -12,7 +12,6 @@ public class CreatePaymentMethodRequest
     public int? CardExpMonth { get; set; }
     public int? CardExpYear { get; set; }
     public string? CardHolderName { get; set; }
-
     public string? BankCode { get; set; }
     public string? BankName { get; set; }
     public string? Agency { get; set; }

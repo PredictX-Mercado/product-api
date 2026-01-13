@@ -29,6 +29,7 @@ public class OrderService : IOrderService
         string provider,
         long? providerPaymentId,
         string status,
+        string? statusDetail,
         string paymentMethod,
         CancellationToken ct = default
     )
@@ -44,6 +45,7 @@ public class OrderService : IOrderService
                 Provider = provider,
                 ProviderPaymentId = providerPaymentId,
                 Status = status,
+                StatusDetail = statusDetail,
                 PaymentMethod = paymentMethod,
             };
             _db.Orders.Add(ord);
@@ -60,6 +62,7 @@ public class OrderService : IOrderService
         existing.Provider = provider;
         existing.ProviderPaymentId = providerPaymentId ?? existing.ProviderPaymentId;
         existing.Status = status;
+        existing.StatusDetail = statusDetail ?? existing.StatusDetail;
         existing.PaymentMethod = paymentMethod;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -70,6 +73,7 @@ public class OrderService : IOrderService
     public async Task<Order?> UpdateStatusAsync(
         string externalOrderId,
         string status,
+        string? statusDetail,
         long? providerPaymentId,
         CancellationToken ct = default
     )
@@ -82,6 +86,7 @@ public class OrderService : IOrderService
             return existing;
 
         existing.Status = status;
+        existing.StatusDetail = statusDetail ?? existing.StatusDetail;
         if (providerPaymentId is not null)
             existing.ProviderPaymentId = providerPaymentId;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -93,6 +98,7 @@ public class OrderService : IOrderService
     public async Task<Order?> UpdateStatusByProviderIdAsync(
         long providerPaymentId,
         string status,
+        string? statusDetail,
         CancellationToken ct = default
     )
     {
@@ -107,6 +113,7 @@ public class OrderService : IOrderService
             return existing;
 
         existing.Status = status;
+        existing.StatusDetail = statusDetail ?? existing.StatusDetail;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);

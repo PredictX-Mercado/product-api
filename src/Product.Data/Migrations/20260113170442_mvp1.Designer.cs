@@ -12,7 +12,7 @@ using Product.Data.Database.Contexts;
 namespace Product.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260111054909_mvp1")]
+    [Migration("20260113170442_mvp1")]
     partial class mvp1
     {
         /// <inheritdoc />
@@ -363,6 +363,9 @@ namespace Product.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("StatusDetail")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -426,6 +429,12 @@ namespace Product.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("MpCardId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MpCustomerId")
+                        .HasColumnType("text");
 
                     b.Property<string>("PixKey")
                         .HasMaxLength(128)

@@ -11,5 +11,6 @@ public class Order : Entity<Guid>
     public string Provider { get; set; } = string.Empty;
     public long? ProviderPaymentId { get; set; }
     public string Status { get; set; } = "created"; // created | pending | approved | rejected
-    public string PaymentMethod { get; set; } = string.Empty; // pix | card | boleto
+    public string? StatusDetail { get; set; }
+    public string PaymentMethod { get; set; } = string.Empty; // pix
 }

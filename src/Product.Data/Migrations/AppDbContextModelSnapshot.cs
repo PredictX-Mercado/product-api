@@ -360,6 +360,9 @@ namespace Product.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("StatusDetail")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -423,6 +426,12 @@ namespace Product.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("MpCardId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MpCustomerId")
+                        .HasColumnType("text");
 
                     b.Property<string>("PixKey")
                         .HasMaxLength(128)

@@ -113,6 +113,7 @@ namespace Product.Data.Migrations
                     Provider = table.Column<string>(type: "text", nullable: false),
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: false),
+                    StatusDetail = table.Column<string>(type: "text", nullable: true),
                     PaymentMethod = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
@@ -375,6 +376,8 @@ namespace Product.Data.Migrations
                     CardExpMonth = table.Column<int>(type: "integer", nullable: true),
                     CardExpYear = table.Column<int>(type: "integer", nullable: true),
                     CardHolderName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    MpCustomerId = table.Column<string>(type: "text", nullable: true),
+                    MpCardId = table.Column<string>(type: "text", nullable: true),
                     BankCode = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
                     BankName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
                     Agency = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),

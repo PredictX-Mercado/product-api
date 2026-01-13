@@ -135,6 +135,10 @@ public class MercadoPagoWebhookController : ControllerBase
         var root = paymentDoc.RootElement;
 
         var status = root.TryGetProperty("status", out var st) ? st.GetString() : null;
+        var statusDetail = root.TryGetProperty("status_detail", out var sd) ? sd.GetString() : null;
+        var rejectionReason = root.TryGetProperty("rejection_reason", out var rr)
+            ? rr.GetString()
+            : null;
         var orderId = root.TryGetProperty("external_reference", out var er) ? er.GetString() : null;
 
         // Atualizar no DB (idempotente)
@@ -142,7 +146,7 @@ public class MercadoPagoWebhookController : ControllerBase
         {
             if (!string.IsNullOrWhiteSpace(orderId) && !string.IsNullOrWhiteSpace(status))
             {
-                await _orderService.UpdateStatusAsync(orderId!, status!, paymentId);
+                await _orderService.UpdateStatusAsync(orderId!, status!, statusDetail, paymentId);
 
                 // If we have an associated PaymentIntent (orderId is a Guid), and payment approved,
                 // confirm deposit so PaymentIntent.ExternalPaymentId is persisted and ledger entry created.
@@ -164,22 +168,32 @@ public class MercadoPagoWebhookController : ControllerBase
                 }
 
                 if (saved is not null)
-                    await _webhookService.MarkProcessedAsync(
-                        saved.Id,
-                        true,
-                        $"Order {orderId} updated to {status}",
-                        orderId
-                    );
+                {
+                    var msg = $"Order {orderId} updated to {status}";
+                    if (
+                        !string.IsNullOrWhiteSpace(statusDetail)
+                        || !string.IsNullOrWhiteSpace(rejectionReason)
+                    )
+                        msg +=
+                            $" (status_detail={statusDetail}, rejection_reason={rejectionReason})";
+
+                    await _webhookService.MarkProcessedAsync(saved.Id, true, msg, orderId);
+                }
             }
             else
             {
                 if (saved is not null)
-                    await _webhookService.MarkProcessedAsync(
-                        saved.Id,
-                        false,
-                        "Missing orderId or status in MP response",
-                        orderId
-                    );
+                {
+                    var msg = "Missing orderId or status in MP response";
+                    if (
+                        !string.IsNullOrWhiteSpace(statusDetail)
+                        || !string.IsNullOrWhiteSpace(rejectionReason)
+                    )
+                        msg +=
+                            $" (status_detail={statusDetail}, rejection_reason={rejectionReason})";
+
+                    await _webhookService.MarkProcessedAsync(saved.Id, false, msg, orderId);
+                }
             }
         }
         catch (Exception ex)

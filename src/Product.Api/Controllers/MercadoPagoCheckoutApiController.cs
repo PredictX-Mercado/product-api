@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -16,16 +15,65 @@ public class MercadoPagoCheckoutApiController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly MercadoPagoOptions _opt;
     private readonly IOrderService _orderService;
+    private readonly ILogger<MercadoPagoCheckoutApiController> _logger;
 
     public MercadoPagoCheckoutApiController(
         IHttpClientFactory httpClientFactory,
         IOptions<MercadoPagoOptions> opt,
-        IOrderService orderService
+        IOrderService orderService,
+        ILogger<MercadoPagoCheckoutApiController> logger
     )
     {
         _httpClientFactory = httpClientFactory;
         _opt = opt.Value;
         _orderService = orderService;
+        _logger = logger;
+    }
+
+    private IActionResult BuildMpErrorResponse(HttpResponseMessage resp, string body)
+    {
+        string? statusDetail = null;
+        string? rejectionReason = null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body ?? string.Empty);
+            var root = doc.RootElement;
+            if (
+                root.TryGetProperty("status_detail", out var sd)
+                && sd.ValueKind == JsonValueKind.String
+            )
+                statusDetail = sd.GetString();
+            if (
+                root.TryGetProperty("rejection_reason", out var rr)
+                && rr.ValueKind == JsonValueKind.String
+            )
+                rejectionReason = rr.GetString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Falha ao parsear body de erro do Mercado Pago");
+        }
+
+        _logger.LogInformation(
+            "MercadoPago returned {StatusCode} (status_detail={StatusDetail}, rejection_reason={RejectionReason}) body={Body}",
+            (int)resp.StatusCode,
+            statusDetail,
+            rejectionReason,
+            body
+        );
+
+        return StatusCode(
+            (int)resp.StatusCode,
+            new
+            {
+                Error = "MercadoPagoError",
+                StatusCode = (int)resp.StatusCode,
+                StatusDetail = statusDetail,
+                RejectionReason = rejectionReason,
+                Raw = body,
+            }
+        );
     }
 
     private static string NormalizeMpStatus(string? mpStatus)
@@ -75,9 +123,12 @@ public class MercadoPagoCheckoutApiController : ControllerBase
     }
 
     [HttpPost("pix")]
-    public async Task<ActionResult<PixResponse>> CreatePix([FromBody] CreatePixRequest req)
+    public async Task<IActionResult> CreatePix([FromBody] CreatePixRequest req)
     {
         var client = CreateMpClient();
+
+        var deviceId = Request.Headers["X-meli-session-id"].ToString();
+
         client.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
 
         var expires = DateTimeOffset
@@ -96,17 +147,28 @@ public class MercadoPagoCheckoutApiController : ControllerBase
             ["notification_url"] = _opt.MP_WEBHOOK_URL,
         };
 
-        var resp = await client.PostAsJsonAsync("https://api.mercadopago.com/v1/payments", payload);
+        var httpReq = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://api.mercadopago.com/v1/payments"
+        )
+        {
+            Content = JsonContent.Create(payload),
+        };
+        if (!string.IsNullOrWhiteSpace(deviceId))
+            httpReq.Headers.TryAddWithoutValidation("X-meli-session-id", deviceId);
+
+        var resp = await client.SendAsync(httpReq);
         var body = await resp.Content.ReadAsStringAsync();
 
         if (!resp.IsSuccessStatusCode)
-            return StatusCode((int)resp.StatusCode, body);
+            return BuildMpErrorResponse(resp, body);
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
         var paymentId = root.GetProperty("id").GetInt64();
         var status = root.TryGetProperty("status", out var st) ? st.GetString() : "unknown";
+        var statusDetail = root.TryGetProperty("status_detail", out var sd) ? sd.GetString() : null;
 
         string? qrBase64 = null;
         string? qrCode = null;
@@ -141,6 +203,7 @@ public class MercadoPagoCheckoutApiController : ControllerBase
                 "mercadopago",
                 paymentId,
                 normalizedStatus ?? "pending",
+                statusDetail,
                 "pix"
             );
         }
@@ -148,124 +211,27 @@ public class MercadoPagoCheckoutApiController : ControllerBase
         { /* swallow persistence errors to avoid breaking payment flow */
         }
 
-        return Ok(new PixResponse(paymentId, qrBase64, qrCode, expiresAt, status ?? "unknown"));
-    }
-
-    [HttpPost("card")]
-    public async Task<IActionResult> CreateCard([FromBody] CreateCardRequest req)
-    {
-        var client = CreateMpClient();
-        client.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
-
-        var payload = new
-        {
-            transaction_amount = req.Amount,
-            token = req.Token,
-            installments = req.Installments <= 0 ? 1 : req.Installments,
-            payment_method_id = req.PaymentMethodId,
-            description = req.Description,
-            payer = new { email = req.BuyerEmail },
-            external_reference = req.OrderId,
-            notification_url = _opt.MP_WEBHOOK_URL,
-        };
-
-        var resp = await client.PostAsJsonAsync("https://api.mercadopago.com/v1/payments", payload);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        if (!resp.IsSuccessStatusCode)
-            return StatusCode((int)resp.StatusCode, body);
-
-        // Atualizar Order com id/status retornado pelo MP
-        try
-        {
-            using var tmp = JsonDocument.Parse(body);
-            var root2 = tmp.RootElement;
-            var id = root2.GetProperty("id").GetInt64();
-            var st = root2.TryGetProperty("status", out var s2)
-                ? s2.GetString() ?? "pending"
-                : "pending";
-            await _orderService.CreateOrUpdateAsync(
-                req.OrderId,
-                req.Amount,
-                "BRL",
-                "mercadopago",
-                id,
-                st,
-                "card"
-            );
-        }
-        catch { }
-
-        return Content(body, "application/json");
-    }
-
-    [HttpPost("boleto")]
-    public async Task<IActionResult> CreateBoleto([FromBody] CreateBoletoRequest req)
-    {
-        var client = CreateMpClient();
-        client.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
-
-        var payload = new
-        {
-            transaction_amount = req.Amount,
-            description = req.Description,
-            payment_method_id = "bolbradesco",
-            payer = new
+        return Ok(
+            new PixResponse
             {
-                email = req.BuyerEmail,
-                first_name = req.FirstName,
-                last_name = req.LastName,
-                identification = new
-                {
-                    type = req.IdentificationType,
-                    number = req.IdentificationNumber,
-                },
-            },
-            external_reference = req.OrderId,
-            notification_url = _opt.MP_WEBHOOK_URL,
-        };
-
-        var resp = await client.PostAsJsonAsync("https://api.mercadopago.com/v1/payments", payload);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        if (!resp.IsSuccessStatusCode)
-            return StatusCode((int)resp.StatusCode, body);
-
-        // Atualizar Order com id/status retornado pelo MP (boleto)
-        try
-        {
-            using var tmp = JsonDocument.Parse(body);
-            var root2 = tmp.RootElement;
-            var id = root2.GetProperty("id").GetInt64();
-            var st = root2.TryGetProperty("status", out var s2)
-                ? s2.GetString() ?? "pending"
-                : "pending";
-            await _orderService.CreateOrUpdateAsync(
-                req.OrderId,
-                req.Amount,
-                "BRL",
-                "mercadopago",
-                id,
-                st,
-                "boleto"
-            );
-        }
-        catch { }
-
-        return Content(body, "application/json");
+                PaymentId = paymentId,
+                QrCodeBase64 = qrBase64,
+                QrCode = qrCode,
+                ExpiresAt = expiresAt,
+                Status = status ?? "unknown",
+            }
+        );
     }
 
     [HttpGet("status/{paymentId:long}")]
-    public async Task<ActionResult<PaymentStatusResponse>> GetPaymentStatus(
-        [FromRoute] long paymentId
-    )
+    public async Task<IActionResult> GetPaymentStatus([FromRoute] long paymentId)
     {
         var client = CreateMpClient();
 
         var resp = await client.GetAsync($"https://api.mercadopago.com/v1/payments/{paymentId}");
         var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
-            return StatusCode((int)resp.StatusCode, body);
+            return BuildMpErrorResponse(resp, body);
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -318,6 +284,7 @@ public class MercadoPagoCheckoutApiController : ControllerBase
                         "mercadopago",
                         paymentId,
                         normalized,
+                        statusDetail,
                         "pix"
                     );
                 }
@@ -327,21 +294,26 @@ public class MercadoPagoCheckoutApiController : ControllerBase
             {
                 try
                 {
-                    await _orderService.UpdateStatusByProviderIdAsync(paymentId, normalized);
+                    await _orderService.UpdateStatusByProviderIdAsync(
+                        paymentId,
+                        normalized,
+                        statusDetail
+                    );
                 }
                 catch { }
             }
         }
 
         return Ok(
-            new PaymentStatusResponse(
-                paymentId,
-                normalized ?? "unknown",
-                statusDetail,
-                ext,
-                amount,
-                expiresAt
-            )
+            new PaymentStatusResponse
+            {
+                PaymentId = paymentId,
+                Status = normalized ?? "unknown",
+                StatusDetail = statusDetail,
+                ExternalReference = ext,
+                Amount = amount,
+                ExpiresAt = expiresAt,
+            }
         );
     }
 }
