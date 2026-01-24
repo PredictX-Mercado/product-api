@@ -65,7 +65,6 @@ Notas:
 - O `docker-compose.yml` mapeia a porta `80` do container para `5000` no host.
 - Ajuste variáveis de ambiente (ex.: `ConnectionStrings__DefaultConnection`) via `docker compose run` ou adicionando `environment` no `docker-compose.yml`.
 
-
 - Visualizar logs em tempo real:
 
 ```bash

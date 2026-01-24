@@ -14,35 +14,7 @@ public static class CorsConfiguration
         {
             o.AddPolicy(
                 "Allowlist",
-                p =>
-                    p.SetIsOriginAllowed(origin =>
-                        {
-                            if (string.IsNullOrWhiteSpace(origin))
-                                return false;
-                            try
-                            {
-                                var host = new Uri(origin).Host;
-                                if (
-                                    host.EndsWith(
-                                        "ngrok-free.app",
-                                        StringComparison.OrdinalIgnoreCase
-                                    )
-                                )
-                                    return true;
-
-                                return configured.Contains(
-                                    origin,
-                                    StringComparer.OrdinalIgnoreCase
-                                );
-                            }
-                            catch
-                            {
-                                return false;
-                            }
-                        })
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials()
+                p => p.WithOrigins(configured).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
             );
         });
 
