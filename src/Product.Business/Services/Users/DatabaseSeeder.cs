@@ -12,34 +12,55 @@ using Product.Data.Models.Wallet;
 
 namespace Product.Business.Services.Users;
 
-public class DatabaseSeeder : IDatabaseSeeder
+public class DatabaseSeeder(
+    IDbMigrationRepository migrationRepository,
+    IUserRepository userRepository,
+    IPaymentMethodRepository paymentMethodRepository,
+    IWalletRepository walletRepository,
+    IPasswordHasher hasher,
+    ICategoryService categoryService,
+    IRolePromotionService rolePromotionService
+) : IDatabaseSeeder
 {
-    private readonly IDbMigrationRepository _migrationRepository;
-    private readonly IUserRepository _userRepository;
-    private readonly IPaymentMethodRepository _paymentMethodRepository;
-    private readonly IWalletRepository _walletRepository;
-    private readonly IPasswordHasher _hasher;
-    private readonly ICategoryService _categoryService;
-    private readonly IRolePromotionService _rolePromotionService;
+    private readonly IDbMigrationRepository _migrationRepository = migrationRepository;
+    private readonly IUserRepository _userRepository = userRepository;
+    private readonly IPaymentMethodRepository _paymentMethodRepository = paymentMethodRepository;
+    private readonly IWalletRepository _walletRepository = walletRepository;
+    private readonly IPasswordHasher _hasher = hasher;
+    private readonly ICategoryService _categoryService = categoryService;
+    private readonly IRolePromotionService _rolePromotionService = rolePromotionService;
 
-    public DatabaseSeeder(
-        IDbMigrationRepository migrationRepository,
-        IUserRepository userRepository,
-        IPaymentMethodRepository paymentMethodRepository,
-        IWalletRepository walletRepository,
-        IPasswordHasher hasher,
-        ICategoryService categoryService,
-        IRolePromotionService rolePromotionService
-    )
-    {
-        _migrationRepository = migrationRepository;
-        _userRepository = userRepository;
-        _paymentMethodRepository = paymentMethodRepository;
-        _walletRepository = walletRepository;
-        _hasher = hasher;
-        _categoryService = categoryService;
-        _rolePromotionService = rolePromotionService;
-    }
+    private sealed record SeedAddress(
+        string ZipCode,
+        string Street,
+        string Neighborhood,
+        string Number,
+        string Complement,
+        string City,
+        string State,
+        string Country
+    );
+
+    private sealed record SeedBankAccount(
+        string BankCode,
+        string BankName,
+        string Agency,
+        string AccountNumber,
+        string AccountDigit,
+        string AccountType,
+        string PixKey
+    );
+
+    private sealed record SeedUserData(
+        string Email,
+        string Username,
+        string Name,
+        string Password,
+        string Cpf,
+        string PhoneNumber,
+        SeedAddress Address,
+        SeedBankAccount BankAccount
+    );
 
     public async Task SeedAsync(IConfiguration configuration, CancellationToken ct = default)
     {
@@ -55,33 +76,17 @@ public class DatabaseSeeder : IDatabaseSeeder
             // swallow category seeding errors
         }
 
-        // Roles are represented by the `Role` string on the `User` entity; no Identity role entities are created.
+        var adminData = GetAdminSeed();
 
-        var seedSection = configuration.GetSection("Seed:Admin");
-        var adminEmail = seedSection.GetValue<string>("Email");
-        var adminUsername = seedSection.GetValue<string>("Username") ?? "admin";
-        var adminName = seedSection.GetValue<string>("Name") ?? "Admin";
-        var adminPassword = seedSection.GetValue<string>("Password") ?? "ChangeMe123!";
-        var adminCpf = seedSection.GetValue<string>("Cpf") ?? "00000000000";
-        var adminAddress = seedSection.GetValue<string>("Address");
-        var adminPhone = seedSection.GetValue<string>("PhoneNumber");
-
-        if (string.IsNullOrWhiteSpace(adminEmail))
-        {
-            await SeedDefaultUserAsync(configuration, ct);
-            await SeedLedgerAsync(configuration, ct);
-            return;
-        }
-
-        var normalizedEmail = NormalizeEmail(adminEmail);
-        var normalizedName = NormalizeName(adminName);
+        var normalizedEmail = NormalizeEmail(adminData.Email);
+        var normalizedName = NormalizeName(adminData.Name);
 
         var admin = await _userRepository.GetUserWithPersonalDataByEmailAsync(normalizedEmail, ct);
         if (admin is null)
         {
-            var username = string.IsNullOrWhiteSpace(adminUsername)
+            var username = string.IsNullOrWhiteSpace(adminData.Username)
                 ? ExtractUsernameFromEmail(normalizedEmail)
-                : NormalizeUsername(adminUsername);
+                : NormalizeUsername(adminData.Username);
             username = await EnsureUniqueUsernameAsync(username, ct);
 
             admin = new ApplicationUser
@@ -90,8 +95,8 @@ public class DatabaseSeeder : IDatabaseSeeder
                 NormalizedEmail = normalizedEmail,
                 UserName = username,
                 NormalizedUserName = username,
-                Name = adminName,
-                PasswordHash = _hasher.Hash(adminPassword),
+                Name = adminData.Name,
+                PasswordHash = _hasher.Hash(adminData.Password),
                 SecurityStamp = Guid.NewGuid().ToString(),
                 ConcurrencyStamp = Guid.NewGuid().ToString(),
                 EmailConfirmed = true,
@@ -99,49 +104,39 @@ public class DatabaseSeeder : IDatabaseSeeder
                 Status = "ACTIVE",
                 PersonalData = new UserPersonalData
                 {
-                    Cpf = adminCpf,
-                    PhoneNumber = string.IsNullOrWhiteSpace(adminPhone) ? null : adminPhone,
-                    Address = BuildAddress(seedSection, adminAddress),
+                    Cpf = adminData.Cpf,
+                    PhoneNumber = string.IsNullOrWhiteSpace(adminData.PhoneNumber)
+                        ? null
+                        : adminData.PhoneNumber,
+                    Address = BuildAddressFromSeed(adminData.Address),
                 },
             };
 
             await _userRepository.AddUserAsync(admin, ct);
         }
 
-        await EnsurePaymentMethodsAsync(admin, seedSection, ct);
+        await EnsurePaymentMethodsAsync(admin, adminData, ct);
 
         // Ensure admin has the role string set
         await _rolePromotionService.PromoteToRoleAsync(admin.Id, RoleName.ADMIN_L3.ToString(), ct);
 
-        await SeedDefaultUserAsync(configuration, ct);
-        await SeedLedgerAsync(configuration, ct);
+        await SeedDefaultUserAsync(ct);
+        await SeedLedgerAsync(ct);
     }
 
-    private async Task SeedDefaultUserAsync(IConfiguration configuration, CancellationToken ct)
+    private async Task SeedDefaultUserAsync(CancellationToken ct)
     {
-        var seedSection = configuration.GetSection("Seed:User");
-        var userEmail = seedSection.GetValue<string>("Email");
-        if (string.IsNullOrWhiteSpace(userEmail))
-        {
-            return;
-        }
+        var userData = GetUserSeed();
 
-        var userUsername = seedSection.GetValue<string>("Username") ?? "user";
-        var userName = seedSection.GetValue<string>("Name") ?? "User";
-        var userPassword = seedSection.GetValue<string>("Password") ?? "ChangeMe123!";
-        var userCpf = seedSection.GetValue<string>("Cpf");
-        var userAddress = seedSection.GetValue<string>("Address");
-        var userPhone = seedSection.GetValue<string>("PhoneNumber");
-
-        var normalizedEmail = NormalizeEmail(userEmail);
-        var normalizedName = NormalizeName(userName);
+        var normalizedEmail = NormalizeEmail(userData.Email);
+        var normalizedName = NormalizeName(userData.Name);
 
         var user = await _userRepository.GetUserWithPersonalDataByEmailAsync(normalizedEmail, ct);
         if (user is null)
         {
-            var username = string.IsNullOrWhiteSpace(userUsername)
+            var username = string.IsNullOrWhiteSpace(userData.Username)
                 ? ExtractUsernameFromEmail(normalizedEmail)
-                : NormalizeUsername(userUsername);
+                : NormalizeUsername(userData.Username);
             username = await EnsureUniqueUsernameAsync(username, ct);
 
             user = new ApplicationUser
@@ -150,47 +145,41 @@ public class DatabaseSeeder : IDatabaseSeeder
                 NormalizedEmail = normalizedEmail,
                 UserName = username,
                 NormalizedUserName = username,
-                Name = userName,
-                PasswordHash = _hasher.Hash(userPassword),
+                Name = userData.Name,
+                PasswordHash = _hasher.Hash(userData.Password),
                 SecurityStamp = Guid.NewGuid().ToString(),
                 ConcurrencyStamp = Guid.NewGuid().ToString(),
                 EmailConfirmed = true,
                 EmailVerifiedAt = DateTimeOffset.UtcNow,
                 Status = "ACTIVE",
-                PersonalData = null,
-            };
-
-            if (!string.IsNullOrWhiteSpace(userCpf))
-            {
-                user.PersonalData = new UserPersonalData
+                PersonalData = new UserPersonalData
                 {
-                    Cpf = userCpf,
-                    PhoneNumber = string.IsNullOrWhiteSpace(userPhone) ? null : userPhone,
-                    Address = BuildAddress(seedSection, userAddress),
-                };
-            }
+                    Cpf = userData.Cpf,
+                    PhoneNumber = string.IsNullOrWhiteSpace(userData.PhoneNumber)
+                        ? null
+                        : userData.PhoneNumber,
+                    Address = BuildAddressFromSeed(userData.Address),
+                },
+            };
 
             await _userRepository.AddUserAsync(user, ct);
         }
 
-        await EnsurePaymentMethodsAsync(user, seedSection, ct);
+        await EnsurePaymentMethodsAsync(user, userData, ct);
 
         // Ensure default user has role string set
         await _rolePromotionService.PromoteToRoleAsync(user.Id, RoleName.USER.ToString(), ct);
     }
 
-    private async Task SeedLedgerAsync(IConfiguration configuration, CancellationToken ct)
+    private async Task SeedLedgerAsync(CancellationToken ct)
     {
-        var ledgerSection = configuration.GetSection("Seed:Ledger");
-        var enabled = ledgerSection.GetValue<bool?>("Enabled");
+        var enabled = true;
         if (enabled is false)
         {
             return;
         }
 
-        var userEmail =
-            ledgerSection.GetValue<string>("UserEmail")
-            ?? configuration.GetSection("Seed:User").GetValue<string>("Email");
+        var userEmail = GetUserSeed().Email;
         if (string.IsNullOrWhiteSpace(userEmail))
         {
             return;
@@ -370,54 +359,90 @@ public class DatabaseSeeder : IDatabaseSeeder
     private static string NormalizeRoleName(string roleName) =>
         RemoveDiacritics(roleName).Trim().ToLowerInvariant();
 
-    private static UserAddress? BuildAddress(IConfiguration section, string? fallbackStreet)
+    private static SeedUserData GetAdminSeed()
     {
-        var addressSection = section.GetSection("Address");
-        var zipCode = addressSection.GetValue<string>("ZipCode");
-        var street = addressSection.GetValue<string>("Street");
-        var neighborhood = addressSection.GetValue<string>("Neighborhood");
-        var number = addressSection.GetValue<string>("Number");
-        var complement = addressSection.GetValue<string>("Complement");
-        var city = addressSection.GetValue<string>("City");
-        var state = addressSection.GetValue<string>("State");
-        var country = addressSection.GetValue<string>("Country");
+        return new SeedUserData(
+            "admin@product.local",
+            "admin",
+            "Admin L3",
+            "ChangeMe123!",
+            "00000000000",
+            "11900000000",
+            new SeedAddress(
+                "00000000",
+                "N/A",
+                "N/A",
+                string.Empty,
+                string.Empty,
+                "N/A",
+                "NA",
+                "BR"
+            ),
+            new SeedBankAccount(
+                "001",
+                "Banco do Brasil",
+                "0001",
+                "123456",
+                "7",
+                "CHECKING",
+                "admin@product.local"
+            )
+        );
+    }
 
-        if (string.IsNullOrWhiteSpace(street))
-        {
-            street = fallbackStreet;
-        }
+    private static SeedUserData GetUserSeed()
+    {
+        return new SeedUserData(
+            "user@product.local",
+            "user",
+            "User",
+            "ChangeMe123!",
+            "11111111111",
+            "11999999999",
+            new SeedAddress(
+                "01001000",
+                "Rua Exemplo",
+                "Centro",
+                "100",
+                "Apto 12",
+                "Sao Paulo",
+                "SP",
+                "BR"
+            ),
+            new SeedBankAccount(
+                "033",
+                "Santander",
+                "1234",
+                "987654",
+                "0",
+                "CHECKING",
+                "user@product.local"
+            )
+        );
+    }
 
-        var hasAny =
-            !string.IsNullOrWhiteSpace(zipCode)
-            || !string.IsNullOrWhiteSpace(street)
-            || !string.IsNullOrWhiteSpace(city)
-            || !string.IsNullOrWhiteSpace(state);
-
-        if (!hasAny)
-        {
-            return null;
-        }
-
+    private static UserAddress BuildAddressFromSeed(SeedAddress s)
+    {
         return new UserAddress
         {
-            ZipCode = string.IsNullOrWhiteSpace(zipCode) ? "00000000" : zipCode,
-            Street = string.IsNullOrWhiteSpace(street) ? "N/A" : street,
-            Neighborhood = string.IsNullOrWhiteSpace(neighborhood) ? null : neighborhood,
-            Number = string.IsNullOrWhiteSpace(number) ? null : number,
-            Complement = string.IsNullOrWhiteSpace(complement) ? null : complement,
-            City = string.IsNullOrWhiteSpace(city) ? "N/A" : city,
-            State = string.IsNullOrWhiteSpace(state) ? "NA" : state,
-            Country = string.IsNullOrWhiteSpace(country) ? "BR" : country,
+            ZipCode = string.IsNullOrWhiteSpace(s.ZipCode) ? "00000000" : s.ZipCode,
+            Street = string.IsNullOrWhiteSpace(s.Street) ? "N/A" : s.Street,
+            Neighborhood = string.IsNullOrWhiteSpace(s.Neighborhood) ? null : s.Neighborhood,
+            Number = string.IsNullOrWhiteSpace(s.Number) ? null : s.Number,
+            Complement = string.IsNullOrWhiteSpace(s.Complement) ? null : s.Complement,
+            City = string.IsNullOrWhiteSpace(s.City) ? "N/A" : s.City,
+            State = string.IsNullOrWhiteSpace(s.State) ? "NA" : s.State,
+            Country = string.IsNullOrWhiteSpace(s.Country) ? "BR" : s.Country,
         };
     }
 
     private async Task EnsurePaymentMethodsAsync(
         ApplicationUser user,
-        IConfiguration section,
+        SeedUserData seed,
         CancellationToken ct
     )
     {
-        var (cardsToAdd, banksToAdd, pixToAdd) = BuildPaymentMethods(section, user.Id);
+        var (cardsToAdd, banksToAdd, pixToAdd) = BuildPaymentMethodsFromSeed(seed, user.Id);
         if (cardsToAdd.Count == 0 && banksToAdd.Count == 0 && pixToAdd.Count == 0)
         {
             return;
@@ -471,21 +496,13 @@ public class DatabaseSeeder : IDatabaseSeeder
         List<UserCard> Cards,
         List<UserBankAccount> Banks,
         List<UserPixKey> Pix
-    ) BuildPaymentMethods(IConfiguration section, Guid userId)
+    ) BuildPaymentMethodsFromSeed(SeedUserData seed, Guid userId)
     {
-        var bankSection = section.GetSection("BankAccount");
-        var bankCode = bankSection.GetValue<string>("BankCode");
-        var bankName = bankSection.GetValue<string>("BankName");
-        var agency = bankSection.GetValue<string>("Agency");
-        var accountNumber = bankSection.GetValue<string>("AccountNumber");
-        var accountDigit = bankSection.GetValue<string>("AccountDigit");
-        var accountType = bankSection.GetValue<string>("AccountType");
-        var pixKey = bankSection.GetValue<string>("PixKey");
-
         var cards = new List<UserCard>();
         var banks = new List<UserBankAccount>();
         var pix = new List<UserPixKey>();
 
+        var pixKey = seed.BankAccount.PixKey;
         if (!string.IsNullOrWhiteSpace(pixKey))
         {
             pix.Add(
@@ -501,9 +518,9 @@ public class DatabaseSeeder : IDatabaseSeeder
         }
 
         if (
-            !string.IsNullOrWhiteSpace(bankCode)
-            && !string.IsNullOrWhiteSpace(agency)
-            && !string.IsNullOrWhiteSpace(accountNumber)
+            !string.IsNullOrWhiteSpace(seed.BankAccount.BankCode)
+            && !string.IsNullOrWhiteSpace(seed.BankAccount.Agency)
+            && !string.IsNullOrWhiteSpace(seed.BankAccount.AccountNumber)
         )
         {
             banks.Add(
@@ -511,12 +528,12 @@ public class DatabaseSeeder : IDatabaseSeeder
                 {
                     Id = Guid.NewGuid(),
                     UserId = userId,
-                    BankCode = bankCode,
-                    BankName = bankName,
-                    Agency = agency,
-                    AccountNumber = accountNumber,
-                    AccountDigit = accountDigit,
-                    AccountType = accountType,
+                    BankCode = seed.BankAccount.BankCode,
+                    BankName = seed.BankAccount.BankName,
+                    Agency = seed.BankAccount.Agency,
+                    AccountNumber = seed.BankAccount.AccountNumber,
+                    AccountDigit = seed.BankAccount.AccountDigit,
+                    AccountType = seed.BankAccount.AccountType,
                     IsDefault = pix.Count == 0 && banks.Count == 0,
                     CreatedAt = DateTimeOffset.UtcNow,
                 }

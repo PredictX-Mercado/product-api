@@ -7,8 +7,14 @@ public static class CorsConfiguration
         IConfiguration configuration
     )
     {
-        var configured =
-            configuration.GetSection("Cors:Allow").Get<string[]>() ?? Array.Empty<string>();
+        var configured = new[]
+        {
+            "http://localhost:3000",
+            "http://localhost:5280",
+            "https://genuine-husky-secondly.ngrok-free.app",
+            "https://product-web-ochre-gamma.vercel.app",
+            "https://product-api-bwcv.onrender.com",
+        };
 
         services.AddCors(o =>
         {
