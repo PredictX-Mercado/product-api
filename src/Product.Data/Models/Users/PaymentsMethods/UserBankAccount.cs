@@ -15,5 +15,5 @@ public class UserBankAccount : Entity<Guid>
 
     public bool IsDefault { get; set; }
 
-    public User? User { get; set; }
+    public ApplicationUser? User { get; set; }
 }

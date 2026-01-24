@@ -1,0 +1,40 @@
+services:
+  api:
+    container_name: API
+    build:
+      context: ./src
+      dockerfile: Product.Api/Dockerfile
+    image: product-api:latest
+    ports:
+      - "5000:80"
+    env_file:
+      - .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=${CONNECTIONSTRINGS_DEFAULT}
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    container_name: PostgresDB
+    env_file:
+      - .env
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

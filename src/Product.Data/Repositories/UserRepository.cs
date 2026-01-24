@@ -8,34 +8,66 @@ namespace Product.Data.Repositories;
 
 public class UserRepository(AppDbContext db) : IUserRepository
 {
-    public async Task<User?> GetUserWithPersonalDataAsync(
+    private static List<string> DeserializeRoles(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return new List<string> { "USER" };
+        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+    }
+
+    private static string SerializeRoles(List<string>? roles)
+    {
+        if (roles is null || !roles.Any())
+            return "USER";
+        return string.Join(
+            ',',
+            roles.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim())
+        );
+    }
+
+    public async Task<ApplicationUser?> GetUserWithPersonalDataAsync(
         Guid userId,
         CancellationToken ct = default
     )
     {
-        return await db
+        var user = await db
             .Users.Include(u => u.PersonalData)
             .ThenInclude(pd => pd!.Address)
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+            return null;
+        user.Role = DeserializeRoles(user.RoleRaw);
+        return user;
     }
 
-    public async Task<User?> GetUserWithPersonalDataByEmailAsync(
+    public async Task<ApplicationUser?> GetUserWithPersonalDataByEmailAsync(
         string normalizedEmail,
         CancellationToken ct = default
     )
     {
-        return await db
+        var user = await db
             .Users.Include(u => u.PersonalData)
             .ThenInclude(pd => pd!.Address)
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        if (user is null)
+            return null;
+        user.Role = DeserializeRoles(user.RoleRaw);
+        return user;
     }
 
-    public async Task<User?> GetUserByEmailAsync(
+    public async Task<ApplicationUser?> GetUserByEmailAsync(
         string normalizedEmail,
         CancellationToken ct = default
     )
     {
-        return await db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
+        if (user is null)
+            return null;
+        user.Role = DeserializeRoles(user.RoleRaw);
+        return user;
     }
 
     public async Task<bool> IsEmailTakenAsync(
@@ -86,18 +118,21 @@ public class UserRepository(AppDbContext db) : IUserRepository
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task AddUserAsync(User user, CancellationToken ct = default)
+    public async Task AddUserAsync(ApplicationUser user, CancellationToken ct = default)
     {
+        user.RoleRaw = SerializeRoles(user.Role);
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
     }
 
     public async Task<string[]> GetUserRolesAsync(Guid userId, CancellationToken ct = default)
     {
-        return await db
-            .UserRoles.Where(ur => ur.UserId == userId)
-            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (_, r) => r.Name ?? string.Empty)
-            .ToArrayAsync(ct);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+            return Array.Empty<string>();
+        var roles = DeserializeRoles(user.RoleRaw);
+        user.Role = roles;
+        return roles.ToArray();
     }
 
     public async Task<IReadOnlyCollection<RefreshToken>> GetRefreshTokensAsync(
@@ -109,6 +144,69 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .RefreshTokens.Where(x => x.UserId == userId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(ct);
+    }
+
+    public async Task<(IReadOnlyCollection<ApplicationUser> Users, int Total)>
+        SearchUsersAsync(
+            string? query,
+            string? by,
+            bool startsWith,
+            int page,
+            int pageSize,
+            CancellationToken ct = default
+        )
+    {
+        var q = db.Users.AsQueryable();
+
+        // include personal data for richer response
+        q = q.Include(u => u.PersonalData).ThenInclude(pd => pd!.Address);
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var pattern = startsWith ? query + "%" : "%" + query + "%";
+            var normalized = query.Trim();
+
+            if (!string.IsNullOrWhiteSpace(by))
+            {
+                var key = by.Trim().ToLowerInvariant();
+                if (key == "name")
+                {
+                    q = q.Where(u => EF.Functions.Like(u.Name!, pattern));
+                }
+                else if (key == "username" || key == "user" || key == "username")
+                {
+                    q = q.Where(u => EF.Functions.Like(u.UserName!, pattern));
+                }
+                else if (key == "email")
+                {
+                    q = q.Where(u => EF.Functions.Like(u.Email!, pattern));
+                }
+                else
+                {
+                    q = q.Where(u => EF.Functions.Like(u.Name!, pattern) || EF.Functions.Like(u.UserName!, pattern));
+                }
+            }
+            else
+            {
+                q = q.Where(u => EF.Functions.Like(u.Name!, pattern) || EF.Functions.Like(u.UserName!, pattern));
+            }
+        }
+
+        var total = await q.CountAsync(ct);
+
+        var users = await q
+            .OrderBy(u => u.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        // ensure Role deserialization
+        foreach (var u in users)
+        {
+            u.Role = DeserializeRoles(u.RoleRaw);
+        }
+
+        return (users, total);
     }
 
     public async Task<RefreshToken?> GetRefreshTokenAsync(
@@ -123,8 +221,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
         );
     }
 
-    public async Task UpdateUserAsync(User user, CancellationToken ct = default)
+    public async Task UpdateUserAsync(ApplicationUser user, CancellationToken ct = default)
     {
+        user.RoleRaw = SerializeRoles(user.Role);
         db.Users.Update(user);
         await db.SaveChangesAsync(ct);
     }

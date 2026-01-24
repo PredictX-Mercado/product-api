@@ -24,6 +24,8 @@ public interface IWebhookService
         bool processed,
         string? result,
         string? orderId = null,
+        int? responseStatusCode = null,
+        int? processingDurationMs = null,
         CancellationToken ct = default
     );
 }

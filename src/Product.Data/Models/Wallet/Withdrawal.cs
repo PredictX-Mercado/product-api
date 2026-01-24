@@ -14,5 +14,5 @@ public class Withdrawal : Entity<Guid>
     public Guid? ApprovedByUserId { get; set; }
     public string? Notes { get; set; }
     public string IdempotencyKey { get; set; } = default!;
-    public User? User { get; set; }
+    public ApplicationUser? User { get; set; }
 }

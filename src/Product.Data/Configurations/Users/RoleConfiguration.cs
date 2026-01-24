@@ -1,17 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Product.Data.Models.Users;
-
-namespace Product.Data.Configurations.Users;
-
-public class RoleConfiguration : IEntityTypeConfiguration<Role>
-{
-    public void Configure(EntityTypeBuilder<Role> builder)
-    {
-        builder.ToTable("AspNetRoles");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.Name).HasMaxLength(256).IsRequired();
-        builder.Property(x => x.NormalizedName).HasMaxLength(256);
-        builder.HasIndex(x => x.NormalizedName).IsUnique();
-    }
-}
+// RoleConfiguration removed: project stores roles as a string on the `User` entity (`User.Role`).
+// IdentityRole-specific EF configuration is no longer required.
+// This file is kept as a deprecated placeholder and can be deleted.

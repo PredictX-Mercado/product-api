@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Product.Business.Interfaces.Auth;
+using Product.Business.Interfaces.Categories;
 using Product.Business.Interfaces.Users;
 using Product.Common.Enums;
 using Product.Data.Interfaces.Repositories;
@@ -14,58 +15,47 @@ namespace Product.Business.Services.Users;
 public class DatabaseSeeder : IDatabaseSeeder
 {
     private readonly IDbMigrationRepository _migrationRepository;
-    private readonly IRoleRepository _roleRepository;
     private readonly IUserRepository _userRepository;
     private readonly IPaymentMethodRepository _paymentMethodRepository;
     private readonly IWalletRepository _walletRepository;
     private readonly IPasswordHasher _hasher;
+    private readonly ICategoryService _categoryService;
+    private readonly IRolePromotionService _rolePromotionService;
 
     public DatabaseSeeder(
         IDbMigrationRepository migrationRepository,
-        IRoleRepository roleRepository,
         IUserRepository userRepository,
         IPaymentMethodRepository paymentMethodRepository,
         IWalletRepository walletRepository,
-        IPasswordHasher hasher
+        IPasswordHasher hasher,
+        ICategoryService categoryService,
+        IRolePromotionService rolePromotionService
     )
     {
         _migrationRepository = migrationRepository;
-        _roleRepository = roleRepository;
         _userRepository = userRepository;
         _paymentMethodRepository = paymentMethodRepository;
         _walletRepository = walletRepository;
         _hasher = hasher;
+        _categoryService = categoryService;
+        _rolePromotionService = rolePromotionService;
     }
 
     public async Task SeedAsync(IConfiguration configuration, CancellationToken ct = default)
     {
         await _migrationRepository.MigrateAsync(ct);
 
-        var roles = new[]
+        // Ensure default categories are seeded
+        try
         {
-            RoleName.USER,
-            RoleName.ADMIN_L1,
-            RoleName.ADMIN_L2,
-            RoleName.ADMIN_L3,
-        };
-        foreach (var roleName in roles)
-        {
-            var roleValue = roleName.ToString();
-            var normalizedRole = NormalizeRoleName(roleValue);
-            if (!await _roleRepository.RoleExistsAsync(roleValue, ct))
-            {
-                await _roleRepository.AddRoleAsync(
-                    new Role
-                    {
-                        Id = Guid.NewGuid(),
-                        Name = roleValue,
-                        NormalizedName = normalizedRole,
-                        ConcurrencyStamp = Guid.NewGuid().ToString(),
-                    },
-                    ct
-                );
-            }
+            await _categoryService.EnsureDefaultCategoriesAsync(ct);
         }
+        catch
+        {
+            // swallow category seeding errors
+        }
+
+        // Roles are represented by the `Role` string on the `User` entity; no Identity role entities are created.
 
         var seedSection = configuration.GetSection("Seed:Admin");
         var adminEmail = seedSection.GetValue<string>("Email");
@@ -94,14 +84,13 @@ public class DatabaseSeeder : IDatabaseSeeder
                 : NormalizeUsername(adminUsername);
             username = await EnsureUniqueUsernameAsync(username, ct);
 
-            admin = new User
+            admin = new ApplicationUser
             {
                 Email = normalizedEmail,
                 NormalizedEmail = normalizedEmail,
                 UserName = username,
                 NormalizedUserName = username,
                 Name = adminName,
-                NormalizedName = normalizedName,
                 PasswordHash = _hasher.Hash(adminPassword),
                 SecurityStamp = Guid.NewGuid().ToString(),
                 ConcurrencyStamp = Guid.NewGuid().ToString(),
@@ -121,15 +110,8 @@ public class DatabaseSeeder : IDatabaseSeeder
 
         await EnsurePaymentMethodsAsync(admin, seedSection, ct);
 
-        var adminRole = await _roleRepository.GetRoleByNameAsync(RoleName.ADMIN_L3.ToString(), ct);
-        if (adminRole is null)
-        {
-            throw new InvalidOperationException("role_not_found");
-        }
-        if (!await _roleRepository.UserRoleExistsAsync(admin.Id, adminRole.Id, ct))
-        {
-            await _roleRepository.AddUserRoleAsync(admin.Id, adminRole.Id, ct);
-        }
+        // Ensure admin has the role string set
+        await _rolePromotionService.PromoteToRoleAsync(admin.Id, RoleName.ADMIN_L3.ToString(), ct);
 
         await SeedDefaultUserAsync(configuration, ct);
         await SeedLedgerAsync(configuration, ct);
@@ -162,14 +144,13 @@ public class DatabaseSeeder : IDatabaseSeeder
                 : NormalizeUsername(userUsername);
             username = await EnsureUniqueUsernameAsync(username, ct);
 
-            user = new User
+            user = new ApplicationUser
             {
                 Email = normalizedEmail,
                 NormalizedEmail = normalizedEmail,
                 UserName = username,
                 NormalizedUserName = username,
                 Name = userName,
-                NormalizedName = normalizedName,
                 PasswordHash = _hasher.Hash(userPassword),
                 SecurityStamp = Guid.NewGuid().ToString(),
                 ConcurrencyStamp = Guid.NewGuid().ToString(),
@@ -194,15 +175,8 @@ public class DatabaseSeeder : IDatabaseSeeder
 
         await EnsurePaymentMethodsAsync(user, seedSection, ct);
 
-        var userRole = await _roleRepository.GetRoleByNameAsync(RoleName.USER.ToString(), ct);
-        if (userRole is null)
-        {
-            throw new InvalidOperationException("role_not_found");
-        }
-        if (!await _roleRepository.UserRoleExistsAsync(user.Id, userRole.Id, ct))
-        {
-            await _roleRepository.AddUserRoleAsync(user.Id, userRole.Id, ct);
-        }
+        // Ensure default user has role string set
+        await _rolePromotionService.PromoteToRoleAsync(user.Id, RoleName.USER.ToString(), ct);
     }
 
     private async Task SeedLedgerAsync(IConfiguration configuration, CancellationToken ct)
@@ -438,7 +412,7 @@ public class DatabaseSeeder : IDatabaseSeeder
     }
 
     private async Task EnsurePaymentMethodsAsync(
-        User user,
+        ApplicationUser user,
         IConfiguration section,
         CancellationToken ct
     )
@@ -449,7 +423,8 @@ public class DatabaseSeeder : IDatabaseSeeder
             return;
         }
 
-        var (existingCards, existingBanks, existingPix) = await _paymentMethodRepository.GetByUserAsync(user.Id, ct);
+        var (existingCards, existingBanks, existingPix) =
+            await _paymentMethodRepository.GetByUserAsync(user.Id, ct);
 
         var addedAny = false;
 
@@ -492,10 +467,11 @@ public class DatabaseSeeder : IDatabaseSeeder
         }
     }
 
-    private static (List<UserCard> Cards, List<UserBankAccount> Banks, List<UserPixKey> Pix) BuildPaymentMethods(
-        IConfiguration section,
-        Guid userId
-    )
+    private static (
+        List<UserCard> Cards,
+        List<UserBankAccount> Banks,
+        List<UserPixKey> Pix
+    ) BuildPaymentMethods(IConfiguration section, Guid userId)
     {
         var bankSection = section.GetSection("BankAccount");
         var bankCode = bankSection.GetValue<string>("BankCode");

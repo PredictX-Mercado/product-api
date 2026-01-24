@@ -31,6 +31,7 @@ public class WebhookService : IWebhookService
             OrderId = orderId,
             Payload = payload,
             Headers = headers,
+            SignatureHeader = ExtractSignatureFromHeaders(headers),
             ReceivedAt = DateTimeOffset.UtcNow,
             AttemptCount = 1,
         };
@@ -52,6 +53,8 @@ public class WebhookService : IWebhookService
         bool processed,
         string? result,
         string? orderId = null,
+        int? responseStatusCode = null,
+        int? processingDurationMs = null,
         CancellationToken ct = default
     )
     {
@@ -62,8 +65,43 @@ public class WebhookService : IWebhookService
         ev.ProcessedAt = DateTimeOffset.UtcNow;
         ev.AttemptCount += 1;
         ev.ProcessingResult = result;
+        if (responseStatusCode.HasValue)
+            ev.ResponseStatusCode = responseStatusCode.Value;
+        if (processingDurationMs.HasValue)
+            ev.ProcessingDurationMs = processingDurationMs.Value;
         if (!string.IsNullOrWhiteSpace(orderId))
             ev.OrderId = orderId;
         await _webhookRepository.UpdateAsync(ev, ct);
+    }
+
+    private static string? ExtractSignatureFromHeaders(string? headers)
+    {
+        if (string.IsNullOrWhiteSpace(headers))
+            return null;
+
+        // headers are stored as Key:val;Key2:val2
+        var parts = headers.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var keys = new[]
+        {
+            "x-hub-signature",
+            "x-hub-signature-256",
+            "x-callback-signature",
+            "x-mercadopago-signature",
+            "x-mp-signature",
+            "signature",
+        };
+
+        foreach (var p in parts)
+        {
+            var idx = p.IndexOf(':');
+            if (idx <= 0)
+                continue;
+            var k = p.Substring(0, idx).Trim();
+            var v = p.Substring(idx + 1).Trim();
+            if (keys.Any(x => string.Equals(x, k, StringComparison.OrdinalIgnoreCase)))
+                return v;
+        }
+
+        return null;
     }
 }

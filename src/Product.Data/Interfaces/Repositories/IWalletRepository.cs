@@ -50,10 +50,7 @@ public interface IWalletRepository
         CancellationToken ct = default
     );
     Task AddLedgerEntryAsync(LedgerEntry entry, CancellationToken ct = default);
-    Task AddLedgerEntriesAsync(
-        IEnumerable<LedgerEntry> entries,
-        CancellationToken ct = default
-    );
+    Task AddLedgerEntriesAsync(IEnumerable<LedgerEntry> entries, CancellationToken ct = default);
     Task UpdatePaymentIntentAsync(PaymentIntent intent, CancellationToken ct = default);
     Task UpdateWithdrawalAsync(Withdrawal withdrawal, CancellationToken ct = default);
     Task<decimal> GetAccountBalanceAsync(Guid accountId, CancellationToken ct = default);
@@ -71,7 +68,16 @@ public interface IWalletRepository
         Guid accountId,
         CancellationToken ct = default
     );
-    Task AddUserAsync(User user, CancellationToken ct = default);
+    Task<LedgerEntry?> GetLedgerEntryByIdAsync(Guid id, CancellationToken ct = default);
+    Task AddReceiptAsync(Receipt receipt, CancellationToken ct = default);
+    Task<List<Receipt>> GetReceiptsAsync(
+        Guid userId,
+        DateTimeOffset? cursorTime,
+        int take,
+        CancellationToken ct = default
+    );
+    Task<Receipt?> GetReceiptByIdAsync(Guid id, CancellationToken ct = default);
+    Task AddUserAsync(ApplicationUser user, CancellationToken ct = default);
     Task<bool> UserExistsAsync(Guid userId, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

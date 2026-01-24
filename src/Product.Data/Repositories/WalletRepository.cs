@@ -22,7 +22,7 @@ public class WalletRepository(AppDbContext db) : IWalletRepository
 
         if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
         {
-            var stubUser = new User
+            var stubUser = new ApplicationUser
             {
                 Id = userId,
                 UserName = userId.ToString(),
@@ -241,7 +241,41 @@ public class WalletRepository(AppDbContext db) : IWalletRepository
             .ToListAsync(ct);
     }
 
-    public async Task AddUserAsync(User user, CancellationToken ct = default)
+    public async Task<LedgerEntry?> GetLedgerEntryByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.LedgerEntries.FindAsync(new object?[] { id }, ct);
+    }
+
+    public async Task AddReceiptAsync(Receipt receipt, CancellationToken ct = default)
+    {
+        db.Receipts.Add(receipt);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<Receipt>> GetReceiptsAsync(
+        Guid userId,
+        DateTimeOffset? cursorTime,
+        int take,
+        CancellationToken ct = default
+    )
+    {
+        var query = db.Receipts.Where(r => r.UserId == userId);
+        if (cursorTime.HasValue)
+            query = query.Where(r => r.CreatedAt < cursorTime.Value);
+
+        return await query
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public async Task<Receipt?> GetReceiptByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.Receipts.FirstOrDefaultAsync(r => r.Id == id, ct);
+    }
+
+    public async Task AddUserAsync(ApplicationUser user, CancellationToken ct = default)
     {
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);

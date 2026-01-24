@@ -14,5 +14,5 @@ public class PaymentIntent : Entity<Guid>
     public string? ExternalPaymentId { get; set; }
     public string IdempotencyKey { get; set; } = default!;
     public DateTimeOffset? ExpiresAt { get; set; }
-    public User? User { get; set; }
+    public ApplicationUser? User { get; set; }
 }

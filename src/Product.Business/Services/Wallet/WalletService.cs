@@ -257,6 +257,30 @@ public class WalletService : IWalletService
 
         await _walletRepository.AddLedgerEntryAsync(entry, ct);
 
+        try
+        {
+            var receipt = new Product.Data.Models.Wallet.Receipt
+            {
+                Id = Guid.NewGuid(),
+                UserId = intent.UserId,
+                Type = "deposit",
+                Amount = entry.Amount,
+                Currency = intent.Currency,
+                Provider = intent.Provider,
+                ProviderPaymentIdText = intent.ExternalPaymentId,
+                ReferenceType = "PaymentIntent",
+                ReferenceId = intent.Id,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(
+                    new { intent = intent, ledgerEntry = entry }
+                ),
+            };
+            await _walletRepository.AddReceiptAsync(receipt, ct);
+        }
+        catch
+        {
+            // swallow to avoid failing the deposit confirmation on receipt persistence issues
+        }
+
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -564,6 +588,26 @@ public class WalletService : IWalletService
             ct
         );
 
+        // Persist immutable receipt for withdrawal request
+        try
+        {
+            var receipt = new Product.Data.Models.Wallet.Receipt
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = "withdraw_request",
+                Amount = -request.Amount,
+                Currency = account.Currency,
+                ReferenceType = "Withdrawal",
+                ReferenceId = withdrawal.Id,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(
+                    new { withdrawal = withdrawal }
+                ),
+            };
+            await _walletRepository.AddReceiptAsync(receipt, ct);
+        }
+        catch { }
+
         return ServiceResult<WithdrawalResponse>.Ok(MapWithdrawal(withdrawal));
     }
 
@@ -757,6 +801,153 @@ public class WalletService : IWalletService
             Currency = withdrawal.Currency,
             RequestedAt = withdrawal.CreatedAt,
         };
+
+    // Receipts (dynamic - built from ledger entries + payment intents)
+    public async Task<ApiResult> GetReceiptsApiAsync(
+        ClaimsPrincipal principal,
+        string? cursor,
+        int? limit,
+        CancellationToken ct = default
+    )
+    {
+        if (!TryGetUserId(principal, out var userId))
+        {
+            return ApiResult.Problem(StatusCodes.Status401Unauthorized, "invalid_token");
+        }
+
+        var result = await GetReceiptsAsync(userId, cursor, limit, ct);
+        if (!result.Success)
+        {
+            var status =
+                result.Error == "invalid_cursor"
+                    ? StatusCodes.Status400BadRequest
+                    : StatusCodes.Status404NotFound;
+            return ApiResult.Problem(status, result.Error ?? "unknown");
+        }
+
+        return ApiResult.Ok(result.Data, envelope: true);
+    }
+
+    public async Task<ApiResult> GetReceiptApiAsync(
+        ClaimsPrincipal principal,
+        Guid receiptId,
+        CancellationToken ct = default
+    )
+    {
+        if (!TryGetUserId(principal, out var userId))
+        {
+            return ApiResult.Problem(StatusCodes.Status401Unauthorized, "invalid_token");
+        }
+
+        var result = await GetReceiptAsync(userId, receiptId, ct);
+        if (!result.Success)
+        {
+            return ApiResult.Problem(StatusCodes.Status404NotFound, result.Error ?? "not_found");
+        }
+
+        return ApiResult.Ok(result.Data, envelope: true);
+    }
+
+    public async Task<ServiceResult<ReceiptListResponse>> GetReceiptsAsync(
+        Guid userId,
+        string? cursor,
+        int? limit,
+        CancellationToken ct = default
+    )
+    {
+        var pageSize = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
+        if (!TryParseCursor(cursor, out var cursorTime))
+        {
+            return ServiceResult<ReceiptListResponse>.Fail("invalid_cursor");
+        }
+
+        var accounts = await EnsureAccountsAsync(userId, ct);
+        var accountIds = accounts.Select(a => a.Id).ToArray();
+
+        var entries = await _walletRepository.GetLedgerEntriesAsync(
+            accountIds,
+            cursorTime,
+            pageSize + 1,
+            ct
+        );
+
+        var hasMore = entries.Count > pageSize;
+        var page = entries.Take(pageSize).ToList();
+        var nextCursor = hasMore && page.Count > 0 ? page.Last().CreatedAt.ToString("o") : null;
+
+        var items = new List<ReceiptItem>();
+
+        foreach (var e in page)
+        {
+            string? provider = null;
+            long? providerPaymentId = null;
+            string? providerPaymentIdText = null;
+
+            if (e.ReferenceType == "PaymentIntent" && e.ReferenceId.HasValue)
+            {
+                var intent = await _walletRepository.GetPaymentIntentByIdAsync(
+                    e.ReferenceId.Value,
+                    ct
+                );
+                if (intent is not null)
+                {
+                    provider = intent.Provider;
+                    providerPaymentIdText = intent.ExternalPaymentId;
+                }
+            }
+
+            items.Add(
+                new ReceiptItem
+                {
+                    Id = e.Id,
+                    Type = e.Type.ToString(),
+                    Amount = e.Amount,
+                    Currency = accounts.FirstOrDefault(a => a.Id == e.AccountId)?.Currency ?? "BRL",
+                    ReferenceType = e.ReferenceType,
+                    ReferenceId = e.ReferenceId,
+                    Provider = provider,
+                    ProviderPaymentId = providerPaymentId,
+                    ProviderPaymentIdText = providerPaymentIdText,
+                    CreatedAt = e.CreatedAt,
+                    MetaJson = e.MetaJson,
+                }
+            );
+        }
+
+        return ServiceResult<ReceiptListResponse>.Ok(
+            new ReceiptListResponse { Items = items, NextCursor = nextCursor }
+        );
+    }
+
+    public async Task<ServiceResult<ReceiptItem>> GetReceiptAsync(
+        Guid userId,
+        Guid receiptId,
+        CancellationToken ct = default
+    )
+    {
+        var r = await _walletRepository.GetReceiptByIdAsync(receiptId, ct);
+        if (r is null)
+            return ServiceResult<ReceiptItem>.Fail("not_found");
+        if (r.UserId != userId)
+            return ServiceResult<ReceiptItem>.Fail("not_found");
+
+        var item = new ReceiptItem
+        {
+            Id = r.Id,
+            Type = r.Type,
+            Amount = r.Amount,
+            Currency = r.Currency,
+            ReferenceType = r.ReferenceType,
+            ReferenceId = r.ReferenceId,
+            Provider = r.Provider,
+            ProviderPaymentId = r.ProviderPaymentId,
+            ProviderPaymentIdText = r.ProviderPaymentIdText,
+            CreatedAt = r.CreatedAt,
+            MetaJson = r.PayloadJson,
+        };
+
+        return ServiceResult<ReceiptItem>.Ok(item);
+    }
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId)
     {

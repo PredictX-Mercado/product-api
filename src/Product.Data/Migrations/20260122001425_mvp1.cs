@@ -13,45 +13,31 @@ namespace Product.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "AspNetRoles",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    NormalizedName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_AspNetRoles", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "AspNetUsers",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    NormalizedName = table.Column<string>(type: "text", nullable: false),
-                    AvatarUrl = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    EmailVerifiedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    Status = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    Username = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    NormalizedUsername = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    AvatarUrl = table.Column<string>(type: "text", nullable: true),
+                    UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Role = table.Column<string>(type: "text", nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    NormalizedEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    NormalizedEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     EmailConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    EmailVerifiedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "text", nullable: true),
                     PasswordHash = table.Column<string>(type: "text", nullable: true),
                     SecurityStamp = table.Column<string>(type: "text", nullable: true),
                     ConcurrencyStamp = table.Column<string>(type: "text", nullable: true),
-                    PhoneNumber = table.Column<string>(type: "text", nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(type: "boolean", nullable: false),
                     TwoFactorEnabled = table.Column<bool>(type: "boolean", nullable: false),
                     LockoutEnd = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     LockoutEnabled = table.Column<bool>(type: "boolean", nullable: false),
-                    AccessFailedCount = table.Column<int>(type: "integer", nullable: false)
+                    AccessFailedCount = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    PhoneNumberConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -79,16 +65,105 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Categories",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Slug = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Categories", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "IdempotencyRecords",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Key = table.Column<string>(type: "text", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ResultPayload = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_IdempotencyRecords", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Markets",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Title = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    Category = table.Column<string>(type: "text", nullable: true),
+                    ClosingDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    YesPrice = table.Column<decimal>(type: "numeric", nullable: false),
+                    NoPrice = table.Column<decimal>(type: "numeric", nullable: false),
+                    VolumeTotal = table.Column<decimal>(type: "numeric", nullable: false),
+                    YesContracts = table.Column<int>(type: "integer", nullable: false),
+                    NoContracts = table.Column<int>(type: "integer", nullable: false),
+                    Volume24h = table.Column<decimal>(type: "numeric", nullable: false),
+                    Volatility24h = table.Column<decimal>(type: "numeric", nullable: false),
+                    RowVersion = table.Column<byte[]>(type: "bytea", nullable: true),
+                    Tags = table.Column<string>(type: "text", nullable: true),
+                    Featured = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedBy = table.Column<Guid>(type: "uuid", nullable: true),
+                    CreatorEmail = table.Column<string>(type: "text", nullable: true),
+                    ResolutionDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    ResolutionSource = table.Column<string>(type: "text", nullable: true),
+                    LowLiquidityWarning = table.Column<bool>(type: "boolean", nullable: false),
+                    ProbabilityBucket = table.Column<string>(type: "text", nullable: true),
+                    SearchSnippet = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Markets", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "MarketTransactions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Type = table.Column<string>(type: "text", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    NetAmount = table.Column<decimal>(type: "numeric", nullable: false),
+                    MarketId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MarketTransactions", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "MPWebhookEvent",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Provider = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    EventType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Provider = table.Column<string>(type: "text", nullable: false),
+                    EventType = table.Column<string>(type: "text", nullable: false),
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
                     OrderId = table.Column<string>(type: "text", nullable: true),
                     Payload = table.Column<string>(type: "text", nullable: false),
-                    Headers = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    Headers = table.Column<string>(type: "text", nullable: true),
+                    SignatureHeader = table.Column<string>(type: "text", nullable: true),
+                    ResponseStatusCode = table.Column<int>(type: "integer", nullable: true),
+                    ProcessingDurationMs = table.Column<int>(type: "integer", nullable: true),
                     ReceivedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     Processed = table.Column<bool>(type: "boolean", nullable: false),
                     ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -107,17 +182,17 @@ namespace Product.Data.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    OrderId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    Amount = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    Currency = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
-                    Provider = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    OrderId = table.Column<string>(type: "text", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
+                    Provider = table.Column<string>(type: "text", nullable: false),
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
-                    ProviderPaymentIdText = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    ProviderPaymentIdText = table.Column<string>(type: "text", nullable: true),
                     ExpiresAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     Credited = table.Column<bool>(type: "boolean", nullable: false),
-                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
                     StatusDetail = table.Column<string>(type: "text", nullable: true),
-                    PaymentMethod = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    PaymentMethod = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -127,24 +202,67 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Positions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    MarketId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Side = table.Column<string>(type: "text", nullable: false),
+                    Contracts = table.Column<int>(type: "integer", nullable: false),
+                    AveragePrice = table.Column<decimal>(type: "numeric", nullable: false),
+                    TotalInvested = table.Column<decimal>(type: "numeric", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Positions", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "QueuedEmails",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ToEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    ToName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
-                    Subject = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    ToEmail = table.Column<string>(type: "text", nullable: false),
+                    ToName = table.Column<string>(type: "text", nullable: true),
+                    Subject = table.Column<string>(type: "text", nullable: false),
                     HtmlBody = table.Column<string>(type: "text", nullable: false),
                     TextBody = table.Column<string>(type: "text", nullable: true),
                     AttemptCount = table.Column<int>(type: "integer", nullable: false),
                     SentAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    LastError = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
+                    LastError = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_QueuedEmails", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Receipts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Type = table.Column<string>(type: "text", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
+                    Provider = table.Column<string>(type: "text", nullable: true),
+                    ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
+                    ProviderPaymentIdText = table.Column<string>(type: "text", nullable: true),
+                    ReferenceType = table.Column<string>(type: "text", nullable: true),
+                    ReferenceId = table.Column<Guid>(type: "uuid", nullable: true),
+                    PayloadJson = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Receipts", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -166,33 +284,12 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "AspNetRoleClaims",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ClaimType = table.Column<string>(type: "text", nullable: true),
-                    ClaimValue = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_AspNetRoleClaims", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_AspNetRoleClaims_AspNetRoles_RoleId",
-                        column: x => x.RoleId,
-                        principalTable: "AspNetRoles",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Accounts",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Currency = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false, defaultValue: "BRL"),
+                    Currency = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -242,30 +339,6 @@ namespace Product.Data.Migrations
                     table.PrimaryKey("PK_AspNetUserLogins", x => new { x.LoginProvider, x.ProviderKey });
                     table.ForeignKey(
                         name: "FK_AspNetUserLogins_AspNetUsers_UserId",
-                        column: x => x.UserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "AspNetUserRoles",
-                columns: table => new
-                {
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RoleId = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_AspNetUserRoles", x => new { x.UserId, x.RoleId });
-                    table.ForeignKey(
-                        name: "FK_AspNetUserRoles_AspNetRoles_RoleId",
-                        column: x => x.RoleId,
-                        principalTable: "AspNetRoles",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_AspNetUserRoles_AspNetUsers_UserId",
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
@@ -344,12 +417,12 @@ namespace Product.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Provider = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Amount = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    Currency = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
+                    Provider = table.Column<string>(type: "text", nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    ExternalPaymentId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
-                    IdempotencyKey = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    ExternalPaymentId = table.Column<string>(type: "text", nullable: true),
+                    IdempotencyKey = table.Column<string>(type: "text", nullable: false),
                     ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
@@ -474,13 +547,13 @@ namespace Product.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Amount = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    Currency = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
                     ApprovedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     ApprovedByUserId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Notes = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    IdempotencyKey = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Notes = table.Column<string>(type: "text", nullable: true),
+                    IdempotencyKey = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -496,16 +569,43 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "MarketCategories",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    MarketId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CategoryId = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MarketCategories", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MarketCategories_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_MarketCategories_Markets_MarketId",
+                        column: x => x.MarketId,
+                        principalTable: "Markets",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "LedgerEntries",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AccountId = table.Column<Guid>(type: "uuid", nullable: false),
                     Type = table.Column<int>(type: "integer", nullable: false),
-                    Amount = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    ReferenceType = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    ReferenceType = table.Column<string>(type: "text", nullable: true),
                     ReferenceId = table.Column<Guid>(type: "uuid", nullable: true),
-                    IdempotencyKey = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    IdempotencyKey = table.Column<string>(type: "text", nullable: true),
                     MetaJson = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
@@ -527,14 +627,14 @@ namespace Product.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     PersonalDataId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ZipCode = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    Street = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    Neighborhood = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
-                    Number = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
-                    Complement = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
-                    City = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    State = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    Country = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    ZipCode = table.Column<string>(type: "text", nullable: false),
+                    Street = table.Column<string>(type: "text", nullable: false),
+                    Neighborhood = table.Column<string>(type: "text", nullable: true),
+                    Number = table.Column<string>(type: "text", nullable: true),
+                    Complement = table.Column<string>(type: "text", nullable: true),
+                    City = table.Column<string>(type: "text", nullable: false),
+                    State = table.Column<string>(type: "text", nullable: false),
+                    Country = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -550,21 +650,9 @@ namespace Product.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Accounts_UserId_Currency",
+                name: "IX_Accounts_UserId",
                 table: "Accounts",
-                columns: new[] { "UserId", "Currency" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AspNetRoleClaims_RoleId",
-                table: "AspNetRoleClaims",
-                column: "RoleId");
-
-            migrationBuilder.CreateIndex(
-                name: "RoleNameIndex",
-                table: "AspNetRoles",
-                column: "NormalizedName",
-                unique: true);
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserClaims_UserId",
@@ -577,123 +665,45 @@ namespace Product.Data.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_AspNetUserRoles_RoleId",
-                table: "AspNetUserRoles",
-                column: "RoleId");
-
-            migrationBuilder.CreateIndex(
                 name: "EmailIndex",
                 table: "AspNetUsers",
-                column: "NormalizedEmail",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AspNetUsers_Email",
-                table: "AspNetUsers",
-                column: "Email",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_AspNetUsers_Username",
-                table: "AspNetUsers",
-                column: "Username",
-                unique: true);
+                column: "NormalizedEmail");
 
             migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
                 table: "AspNetUsers",
-                column: "NormalizedUsername",
+                column: "NormalizedUserName",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_AuditLogs_CreatedAt",
-                table: "AuditLogs",
-                column: "CreatedAt");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_EmailVerificationTokens_TokenHash",
+                name: "IX_EmailVerificationTokens_UserId",
                 table: "EmailVerificationTokens",
-                column: "TokenHash",
-                unique: true);
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_EmailVerificationTokens_UserId_ExpiresAt",
-                table: "EmailVerificationTokens",
-                columns: new[] { "UserId", "ExpiresAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_LedgerEntries_AccountId_CreatedAt",
+                name: "IX_LedgerEntries_AccountId",
                 table: "LedgerEntries",
-                columns: new[] { "AccountId", "CreatedAt" });
+                column: "AccountId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_LedgerEntries_IdempotencyKey",
-                table: "LedgerEntries",
-                column: "IdempotencyKey",
-                unique: true);
+                name: "IX_MarketCategories_CategoryId",
+                table: "MarketCategories",
+                column: "CategoryId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_MPWebhookEvent_ProviderPaymentId",
-                table: "MPWebhookEvent",
-                column: "ProviderPaymentId");
+                name: "IX_MarketCategories_MarketId",
+                table: "MarketCategories",
+                column: "MarketId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Orders_OrderId",
-                table: "Orders",
-                column: "OrderId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_ProviderPaymentId",
-                table: "Orders",
-                column: "ProviderPaymentId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_ProviderPaymentIdText",
-                table: "Orders",
-                column: "ProviderPaymentIdText");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PasswordResetTokens_TokenHash",
+                name: "IX_PasswordResetTokens_UserId",
                 table: "PasswordResetTokens",
-                column: "TokenHash",
-                unique: true);
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_PasswordResetTokens_UserId_ExpiresAt",
-                table: "PasswordResetTokens",
-                columns: new[] { "UserId", "ExpiresAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PaymentIntents_ExternalPaymentId",
+                name: "IX_PaymentIntents_UserId",
                 table: "PaymentIntents",
-                column: "ExternalPaymentId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PaymentIntents_IdempotencyKey",
-                table: "PaymentIntents",
-                column: "IdempotencyKey",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PaymentIntents_UserId_CreatedAt",
-                table: "PaymentIntents",
-                columns: new[] { "UserId", "CreatedAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_QueuedEmails_SentAt",
-                table: "QueuedEmails",
-                column: "SentAt");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_QueuedEmails_SentAt_CreatedAt",
-                table: "QueuedEmails",
-                columns: new[] { "SentAt", "CreatedAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_RefreshTokens_TokenHash",
-                table: "RefreshTokens",
-                column: "TokenHash",
-                unique: true);
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserAddresses_PersonalDataId",
@@ -712,12 +722,6 @@ namespace Product.Data.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserPersonalData_Cpf",
-                table: "UserPersonalData",
-                column: "Cpf",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_UserPersonalData_UserId",
                 table: "UserPersonalData",
                 column: "UserId",
@@ -729,31 +733,19 @@ namespace Product.Data.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Withdrawals_IdempotencyKey",
+                name: "IX_Withdrawals_UserId",
                 table: "Withdrawals",
-                column: "IdempotencyKey",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Withdrawals_UserId_CreatedAt",
-                table: "Withdrawals",
-                columns: new[] { "UserId", "CreatedAt" });
+                column: "UserId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "AspNetRoleClaims");
-
-            migrationBuilder.DropTable(
                 name: "AspNetUserClaims");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserLogins");
-
-            migrationBuilder.DropTable(
-                name: "AspNetUserRoles");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens");
@@ -765,7 +757,16 @@ namespace Product.Data.Migrations
                 name: "EmailVerificationTokens");
 
             migrationBuilder.DropTable(
+                name: "IdempotencyRecords");
+
+            migrationBuilder.DropTable(
                 name: "LedgerEntries");
+
+            migrationBuilder.DropTable(
+                name: "MarketCategories");
+
+            migrationBuilder.DropTable(
+                name: "MarketTransactions");
 
             migrationBuilder.DropTable(
                 name: "MPWebhookEvent");
@@ -780,7 +781,13 @@ namespace Product.Data.Migrations
                 name: "PaymentIntents");
 
             migrationBuilder.DropTable(
+                name: "Positions");
+
+            migrationBuilder.DropTable(
                 name: "QueuedEmails");
+
+            migrationBuilder.DropTable(
+                name: "Receipts");
 
             migrationBuilder.DropTable(
                 name: "RefreshTokens");
@@ -801,10 +808,13 @@ namespace Product.Data.Migrations
                 name: "Withdrawals");
 
             migrationBuilder.DropTable(
-                name: "AspNetRoles");
+                name: "Accounts");
 
             migrationBuilder.DropTable(
-                name: "Accounts");
+                name: "Categories");
+
+            migrationBuilder.DropTable(
+                name: "Markets");
 
             migrationBuilder.DropTable(
                 name: "UserPersonalData");

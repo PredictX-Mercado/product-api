@@ -11,7 +11,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Product.Business.Interfaces.Auth;
 using Product.Business.Interfaces.Results;
+using Product.Business.Interfaces.Users;
 using Product.Business.Options;
+using Product.Business.Providers;
 using Product.Common.Enums;
 using Product.Contracts.Auth;
 using Product.Data.Interfaces.Repositories;
@@ -21,10 +23,10 @@ namespace Product.Business.Services.Auth;
 
 public class AuthService : IAuthService
 {
-    private readonly UserManager<User> _userManager;
-    private readonly RoleManager<Role> _roleManager;
-    private readonly SignInManager<User> _signInManager;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IUserRepository _userRepository;
+    private readonly IRolePromotionService _rolePromotionService;
     private readonly IEmailSender _emailSender;
     private readonly IOptions<FrontendOptions> _frontendOptions;
     private readonly IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> _bearerOptions;
@@ -32,19 +34,18 @@ public class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
-        UserManager<User> userManager,
-        RoleManager<Role> roleManager,
-        SignInManager<User> signInManager,
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager,
         IUserRepository userRepository,
         IEmailSender emailSender,
         IOptions<FrontendOptions> frontendOptions,
         IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> bearerOptions,
         IOptions<Product.Business.Options.GoogleAuthOptions> googleOptions,
-        ILogger<AuthService> logger
+        ILogger<AuthService> logger,
+        IRolePromotionService rolePromotionService
     )
     {
         _userManager = userManager;
-        _roleManager = roleManager;
         _signInManager = signInManager;
         _userRepository = userRepository;
         _emailSender = emailSender;
@@ -52,6 +53,7 @@ public class AuthService : IAuthService
         _bearerOptions = bearerOptions;
         _googleOptions = googleOptions;
         _logger = logger;
+        _rolePromotionService = rolePromotionService;
     }
 
     public async Task<ApiResult> SignUpApiAsync(SignupRequest request, CancellationToken ct)
@@ -128,8 +130,19 @@ public class AuthService : IAuthService
         CancellationToken ct
     )
     {
-        await ForgotPasswordAsync(request, ct);
-        return ApiResult.Ok(null);
+        try
+        {
+            await ForgotPasswordAsync(request, ct);
+            return ApiResult.Ok(null);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message == "external_account_cannot_change_password")
+        {
+            return ApiResult.Problem(
+                StatusCodes.Status400BadRequest,
+                "external_account_cannot_change_password"
+            );
+        }
     }
 
     public async Task<ApiResult> ResetPasswordApiAsync(
@@ -137,8 +150,27 @@ public class AuthService : IAuthService
         CancellationToken ct
     )
     {
-        await ResetPasswordAsync(request, ct);
-        return ApiResult.Ok(null);
+        try
+        {
+            await ResetPasswordAsync(request, ct);
+            return ApiResult.Ok(null);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message == "external_account_cannot_change_password")
+        {
+            return ApiResult.Problem(
+                StatusCodes.Status400BadRequest,
+                "external_account_cannot_change_password"
+            );
+        }
+        catch (ArgumentException ex) when (ex.Message == "invalid_reset_token")
+        {
+            return ApiResult.Problem(StatusCodes.Status400BadRequest, "invalid_reset_token");
+        }
+        catch (ArgumentException ex)
+        {
+            return ApiResult.Problem(StatusCodes.Status400BadRequest, ex.Message);
+        }
     }
 
     public async Task<ApiResult> VerifyResetCodeApiAsync(VerifyResetCodeRequest request)
@@ -155,6 +187,14 @@ public class AuthService : IAuthService
         catch (ArgumentException ex) when (ex.Message == "invalid_reset_token")
         {
             return ApiResult.Problem(StatusCodes.Status400BadRequest, "invalid_reset_token");
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message == "external_account_cannot_change_password")
+        {
+            return ApiResult.Problem(
+                StatusCodes.Status400BadRequest,
+                "external_account_cannot_change_password"
+            );
         }
         catch (ArgumentException ex)
         {
@@ -328,12 +368,12 @@ public class AuthService : IAuthService
             var displayName = string.IsNullOrWhiteSpace(payload.Name)
                 ? initialUserName
                 : payload.Name;
-            user = new User
+            user = new ApplicationUser
             {
                 Email = NormalizeEmail(email),
                 UserName = normalizedUserName,
                 Name = displayName,
-                NormalizedName = NormalizeName(displayName),
+                NormalizedUserName = NormalizedUserName(normalizedUserName),
                 Status = "ACTIVE",
                 EmailConfirmed = true,
                 EmailVerifiedAt = DateTimeOffset.UtcNow,
@@ -347,8 +387,12 @@ public class AuthService : IAuthService
                     createResult.Errors.FirstOrDefault()?.Code ?? "google_signup_failed"
                 );
 
-            await EnsureRoleAsync(RoleName.USER.ToString());
-            await _userManager.AddToRoleAsync(user, RoleName.USER.ToString());
+            // roles are managed via the user's `Role` string property; no Identity role creation
+            await _rolePromotionService.PromoteToRoleAsync(
+                user.Id,
+                RoleName.USER.ToString(),
+                CancellationToken.None
+            );
 
             await _userRepository.EnsurePersonalDataAsync(user.Id);
             // Ensure external login is associated when creating user via Google
@@ -431,12 +475,12 @@ public class AuthService : IAuthService
             ? request.UserName.Trim()
             : request.Name.Trim();
 
-        var user = new User
+        var user = new ApplicationUser
         {
             Email = NormalizeEmail(request.Email),
             UserName = normalizedUserName,
             Name = displayName,
-            NormalizedName = NormalizeName(displayName),
+            NormalizedUserName = NormalizedUserName(normalizedUserName),
             Status = "ACTIVE",
         };
 
@@ -446,8 +490,8 @@ public class AuthService : IAuthService
                 createResult.Errors.FirstOrDefault()?.Code ?? "signup_failed"
             );
 
-        await EnsureRoleAsync(RoleName.USER.ToString());
-        await _userManager.AddToRoleAsync(user, RoleName.USER.ToString());
+        // Set default role on user and persist via role promotion service
+        await _rolePromotionService.PromoteToRoleAsync(user.Id, RoleName.USER.ToString(), ct);
 
         await _userRepository.EnsurePersonalDataAsync(user.Id, ct);
 
@@ -458,13 +502,22 @@ public class AuthService : IAuthService
     {
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null)
+        {
+            _logger.LogWarning("SignIn failed: user not found Email={Email}", request.Email);
             throw new UnauthorizedAccessException("invalid_credentials");
+        }
 
         if (!string.Equals(user.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("SignIn failed: user inactive UserId={UserId} Email={Email}", user.Id, request.Email);
             throw new InvalidOperationException("user_inactive");
+        }
 
         if (!user.EmailConfirmed)
+        {
+            _logger.LogWarning("SignIn failed: email not confirmed UserId={UserId} Email={Email}", user.Id, request.Email);
             throw new InvalidOperationException("email_not_confirmed");
+        }
 
         var useCookieScheme = useCookies == true || useSessionCookies == true;
         var isPersistent = useCookies == true && useSessionCookies != true;
@@ -482,14 +535,23 @@ public class AuthService : IAuthService
             result = await HandleTwoFactorAsync(request, isPersistent);
 
         if (result.IsLockedOut)
+        {
+            _logger.LogWarning("SignIn failed: user locked out UserId={UserId} Email={Email}", user.Id, request.Email);
             throw new InvalidOperationException("user_locked_out");
+        }
         if (!result.Succeeded)
+        {
+            _logger.LogWarning("SignIn failed: invalid credentials UserId={UserId} Email={Email}", user.Id, request.Email);
             throw new UnauthorizedAccessException("invalid_credentials");
+        }
+
+        _logger.LogInformation("SignIn success: UserId={UserId} Email={Email} Persistent={IsPersistent}", user.Id, request.Email, isPersistent);
     }
 
     public async Task SignOutAsync()
     {
         await _signInManager.SignOutAsync();
+        _logger.LogInformation("SignOut executed");
     }
 
     public async Task RefreshAsync(RefreshRequest request)
@@ -527,27 +589,68 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(code))
             throw new ArgumentException("invalid_token");
 
-        string decodedCode;
-        try
-        {
-            decodedCode = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(code));
-        }
-        catch
-        {
-            throw new ArgumentException("invalid_token");
-        }
+        string decodedCode = TryDecodeTokenLenient(code);
 
         IdentityResult result = !string.IsNullOrWhiteSpace(newEmail)
             ? await _userManager.ChangeEmailAsync(user, newEmail, decodedCode)
             : await _userManager.ConfirmEmailAsync(user, decodedCode);
 
         if (!result.Succeeded)
+        {
+            // Log identity errors for debugging (do not log the token itself)
+            try
+            {
+                var errors = string.Join(';', result.Errors.Select(e => e.Description));
+                _logger.LogWarning(
+                    "ConfirmEmail failed for user {UserId}: {Errors}",
+                    userId,
+                    errors
+                );
+            }
+            catch { }
+
             throw new ArgumentException("invalid_token");
+        }
 
         if (!user.EmailConfirmed)
             user.EmailConfirmed = true;
         user.EmailVerifiedAt = DateTimeOffset.UtcNow;
         await _userManager.UpdateAsync(user);
+    }
+
+    private static string TryDecodeTokenLenient(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            throw new ArgumentException("invalid_token");
+
+        // Try base64url first (default Identity encoding)
+        try
+        {
+            return Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(code));
+        }
+        catch
+        {
+            // Fallback: try regular base64 with padding and char replacements
+            try
+            {
+                var s = code.Replace('-', '+').Replace('_', '/');
+                switch (s.Length % 4)
+                {
+                    case 2:
+                        s += "==";
+                        break;
+                    case 3:
+                        s += "=";
+                        break;
+                }
+                var bytes = Convert.FromBase64String(s);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch
+            {
+                throw new ArgumentException("invalid_token");
+            }
+        }
     }
 
     public async Task ResendConfirmationEmailAsync(
@@ -566,6 +669,15 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null)
             return;
+        // If the account was created via external provider (e.g. Google), do not send reset email
+        var logins = await _userManager.GetLoginsAsync(user);
+        if (
+            logins != null
+            && logins.Any(l =>
+                string.Equals(l.LoginProvider, "Google", StringComparison.OrdinalIgnoreCase)
+            )
+        )
+            throw new InvalidOperationException("external_account_cannot_change_password");
         var resetCode = await _userManager.GeneratePasswordResetTokenAsync(user);
         await _emailSender.SendForgotPasswordAsync(
             user.Email ?? request.Email,
@@ -581,9 +693,19 @@ public class AuthService : IAuthService
         if (user is null)
             throw new KeyNotFoundException("user_not_found");
 
+        // If the account is external (Google), do not allow reset code verification
+        var logins = await _userManager.GetLoginsAsync(user);
+        if (
+            logins != null
+            && logins.Any(l =>
+                string.Equals(l.LoginProvider, "Google", StringComparison.OrdinalIgnoreCase)
+            )
+        )
+            throw new InvalidOperationException("external_account_cannot_change_password");
+
         var isValid = await _userManager.VerifyUserTokenAsync(
             user,
-            Product.Business.Providers.PasswordResetTokenProvider<User>.ProviderName,
+            PasswordResetTokenProvider<ApplicationUser>.ProviderName,
             "ResetPassword",
             request.ResetCode
         );
@@ -600,6 +722,16 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null)
             throw new ArgumentException("invalid_reset_token");
+
+        // Block resets for external accounts
+        var logins = await _userManager.GetLoginsAsync(user);
+        if (
+            logins != null
+            && logins.Any(l =>
+                string.Equals(l.LoginProvider, "Google", StringComparison.OrdinalIgnoreCase)
+            )
+        )
+            throw new InvalidOperationException("external_account_cannot_change_password");
 
         var result = await _userManager.ResetPasswordAsync(
             user,
@@ -826,7 +958,7 @@ public class AuthService : IAuthService
     private static string NormalizeEmail(string email) =>
         RemoveDiacritics(email).Trim().ToLowerInvariant();
 
-    private static string NormalizeName(string name)
+    private static string NormalizedUserName(string name)
     {
         var trimmed = name?.Trim() ?? string.Empty;
         return RemoveDiacritics(trimmed);
@@ -864,23 +996,9 @@ public class AuthService : IAuthService
         return new string(buffer[..idx]).Normalize(NormalizationForm.FormC);
     }
 
-    private async Task EnsureRoleAsync(string roleName)
-    {
-        if (await _roleManager.RoleExistsAsync(roleName))
-            return;
-        var normalized = _roleManager.NormalizeKey(roleName) ?? roleName;
-        await _roleManager.CreateAsync(
-            new Role
-            {
-                Id = Guid.NewGuid(),
-                Name = roleName,
-                NormalizedName = normalized,
-                ConcurrencyStamp = Guid.NewGuid().ToString(),
-            }
-        );
-    }
+    // Role management via Identity is disabled; roles are stored in the user's `Role` string.
 
-    private async Task SendConfirmationEmailAsync(User user, CancellationToken ct)
+    private async Task SendConfirmationEmailAsync(ApplicationUser user, CancellationToken ct)
     {
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));

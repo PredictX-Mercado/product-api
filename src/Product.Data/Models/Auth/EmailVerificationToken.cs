@@ -9,5 +9,5 @@ public class EmailVerificationToken : Entity<Guid>
     public string TokenHash { get; set; } = default!;
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? UsedAt { get; set; }
-    public User? User { get; set; }
+    public ApplicationUser? User { get; set; }
 }

@@ -5,10 +5,15 @@ using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Product.Api.Serialization;
+using Product.Api.Services;
 using Product.Business.BackgroundServices;
+using Product.Business.Interfaces;
 using Product.Business.Interfaces.Audit;
 using Product.Business.Interfaces.Auth;
+using Product.Business.Interfaces.Categories;
 using Product.Business.Interfaces.Email;
+using Product.Business.Interfaces.Market;
+using Product.Business.Interfaces.Notifications;
 using Product.Business.Interfaces.Payments;
 using Product.Business.Interfaces.Users;
 using Product.Business.Interfaces.Wallet;
@@ -17,6 +22,8 @@ using Product.Business.Providers;
 using Product.Business.Services.Audit;
 using Product.Business.Services.Auth;
 using Product.Business.Services.Mailers;
+using Product.Business.Services.Markets;
+using Product.Business.Services.Markets.Categories;
 using Product.Business.Services.Payments;
 using Product.Business.Services.Users;
 using Product.Business.Services.Wallet;
@@ -61,6 +68,7 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddHttpClient();
+        services.AddSignalR();
 
         services.AddFluentValidationAutoValidation();
         services.AddValidatorsFromAssembly(typeof(SignupRequestValidator).Assembly);
@@ -96,7 +104,7 @@ public static class DependencyInjection
         });
 
         services.Configure<DataProtectionTokenProviderOptions>(
-            PasswordResetTokenProvider<User>.OptionsName,
+            PasswordResetTokenProvider<ApplicationUser>.OptionsName,
             options =>
             {
                 var tokenOptions =
@@ -136,12 +144,20 @@ public static class DependencyInjection
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IEmailQueueRepository, EmailQueueRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
-        services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IWebhookRepository, WebhookRepository>();
         services.AddScoped<IWalletRepository, WalletRepository>();
         services.AddScoped<IDbMigrationRepository, DbMigrationRepository>();
+        services.AddScoped<IMarketRepository, MarketRepository>();
+        services.AddScoped<IMarketService, MarketService>();
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IMarketNotifier, MarketNotifier>();
+        services.AddScoped<IRolePromotionService, RolePromotionService>();
+        services.AddScoped<
+            IUserClaimsPrincipalFactory<ApplicationUser>,
+            AppClaimsPrincipalFactory
+        >();
 
         services.AddHostedService<PersistentEmailBackgroundService>();
 
@@ -155,7 +171,7 @@ public static class DependencyInjection
     {
         services.AddSingleton<ILookupNormalizer, DiacriticsLookupNormalizer>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
-        services.AddScoped<IPasswordHasher<User>, PasswordHasher>();
+        services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher>();
 
         services
             .AddAuthentication(options =>
@@ -200,7 +216,7 @@ public static class DependencyInjection
             .AddIdentityCookies();
 
         services
-            .AddIdentityCore<User>(options =>
+            .AddIdentityCore<ApplicationUser>(options =>
             {
                 options.User.RequireUniqueEmail = true;
                 options.SignIn.RequireConfirmedEmail = true;
@@ -216,14 +232,13 @@ public static class DependencyInjection
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
 
                 options.Tokens.PasswordResetTokenProvider =
-                    PasswordResetTokenProvider<User>.ProviderName;
+                    PasswordResetTokenProvider<ApplicationUser>.ProviderName;
             })
-            .AddRoles<Role>()
             .AddEntityFrameworkStores<AppDbContext>()
             .AddSignInManager()
             .AddDefaultTokenProviders()
-            .AddTokenProvider<PasswordResetTokenProvider<User>>(
-                PasswordResetTokenProvider<User>.ProviderName
+            .AddTokenProvider<PasswordResetTokenProvider<ApplicationUser>>(
+                PasswordResetTokenProvider<ApplicationUser>.ProviderName
             );
 
         services.ConfigureApplicationCookie(options =>
@@ -243,15 +258,7 @@ public static class DependencyInjection
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         });
 
-        services.AddAuthorization(options =>
-        {
-            options.AddPolicy(
-                "RequireAdminL1",
-                p => p.RequireRole("ADMIN_L1", "ADMIN_L2", "ADMIN_L3")
-            );
-            options.AddPolicy("RequireAdminL2", p => p.RequireRole("ADMIN_L2", "ADMIN_L3"));
-            options.AddPolicy("RequireAdminL3", p => p.RequireRole("ADMIN_L3"));
-        });
+        services.AddRolePolicies();
 
         return services;
     }

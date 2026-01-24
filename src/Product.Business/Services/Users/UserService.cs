@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Product.Business.Interfaces.Audit;
 using Product.Business.Interfaces.Auth;
@@ -171,6 +170,29 @@ public class UserService : IUserService
         return ApiResult.Ok(true, envelope: true);
     }
 
+    public async Task<ApiResult> GetAllApiAsync(
+        string? query,
+        string? by,
+        bool startsWith,
+        int page,
+        int pageSize,
+        CancellationToken ct = default
+    )
+    {
+        // only admins should call this; controller enforces authorization
+        var (users, total) = await _userRepository.SearchUsersAsync(query, by, startsWith, page, pageSize, ct);
+
+        var list = new List<UserView>();
+        foreach (var u in users)
+        {
+            var view = await BuildUserViewAsync(u, ct);
+            list.Add(view);
+        }
+
+        var meta = new { total, page, pageSize };
+        return ApiResult.Ok(list, envelope: true, meta: meta);
+    }
+
     public async Task<ServiceResult<UserView>> GetMeAsync(
         Guid userId,
         CancellationToken ct = default
@@ -231,7 +253,7 @@ public class UserService : IUserService
         if (request.Name is not null)
         {
             user.Name = request.Name;
-            user.NormalizedName = NormalizeName(request.Name);
+            user.NormalizedUserName = NormalizedUserName(request.Name);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Password))
@@ -456,7 +478,7 @@ public class UserService : IUserService
     }
 
     private async Task HandleProfilePersonalDataUpdateAsync(
-        User user,
+        ApplicationUser user,
         UpdateProfileRequest request,
         CancellationToken ct
     )
@@ -508,7 +530,7 @@ public class UserService : IUserService
         }
     }
 
-    private async Task<UserView> BuildUserViewAsync(User user, CancellationToken ct)
+    private async Task<UserView> BuildUserViewAsync(ApplicationUser user, CancellationToken ct)
     {
         var roles = await _userRepository.GetUserRolesAsync(user.Id, ct);
 
@@ -550,7 +572,7 @@ public class UserService : IUserService
     private static string NormalizeEmail(string email) =>
         RemoveDiacritics(email).Trim().ToLowerInvariant();
 
-    private static string NormalizeName(string name)
+    private static string NormalizedUserName(string name)
     {
         var trimmed = name?.Trim() ?? string.Empty;
         return RemoveDiacritics(trimmed);

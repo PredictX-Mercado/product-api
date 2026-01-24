@@ -6,7 +6,6 @@ namespace Product.Data.Repositories;
 
 public class DbMigrationRepository(AppDbContext db) : IDbMigrationRepository
 {
-
     public async Task MigrateAsync(CancellationToken ct = default)
     {
         await db.Database.MigrateAsync(ct);

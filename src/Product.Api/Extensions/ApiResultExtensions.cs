@@ -8,6 +8,11 @@ public static class ApiResultExtensions
 {
     public static IActionResult ToActionResult(this ControllerBase controller, ApiResult result)
     {
+        if (controller.Response.HasStarted)
+        {
+            return new EmptyResult();
+        }
+
         if (result.StatusCode == StatusCodes.Status204NoContent)
         {
             return new StatusCodeResult(StatusCodes.Status204NoContent);

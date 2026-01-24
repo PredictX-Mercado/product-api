@@ -38,4 +38,35 @@ A API sobe, por padrao, nas portas configuradas no `launchSettings.json` (Kestre
 - `src/Product.Data` – EF Core com PostgreSQL e migracoes; Dapper para consultas pontuais.
 - `src/Product.Contracts` / `src/Product.Common` – DTOs, enums, entidades base e utilitarios.
 
+## Docker
 
+Para facilitar o desenvolvimento e execução local, há um `Dockerfile` para a API e um `docker-compose.yml` na raiz.
+
+- Build da imagem:
+
+```bash
+docker compose build api
+```
+
+- Executar em background (abre a API em `http://localhost:5000`):
+
+```bash
+docker compose up -d
+```
+
+- Parar e remover containers:
+
+```bash
+docker compose down
+```
+
+Notas:
+
+- O `docker-compose.yml` mapeia a porta `80` do container para `5000` no host.
+- Ajuste variáveis de ambiente (ex.: `ConnectionStrings__DefaultConnection`) via `docker compose run` ou adicionando `environment` no `docker-compose.yml`.
+
+
+- Visualizar logs em tempo real:
+
+```bash
+docker compose logs -f

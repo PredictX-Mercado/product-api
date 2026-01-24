@@ -10,6 +10,9 @@ public class MPWebhookEvent : Entity<Guid>
     public string? OrderId { get; set; }
     public string Payload { get; set; } = string.Empty; // raw json
     public string? Headers { get; set; }
+    public string? SignatureHeader { get; set; }
+    public int? ResponseStatusCode { get; set; }
+    public int? ProcessingDurationMs { get; set; }
     public DateTimeOffset ReceivedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool Processed { get; set; } = false;
     public DateTimeOffset? ProcessedAt { get; set; }

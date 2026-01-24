@@ -73,10 +73,7 @@ public class MercadoPagoService : IMercadoPagoService
             ? "credit_card"
             : req.PaymentType.Trim().ToLowerInvariant();
 
-        var normalizedPaymentMethodId = NormalizePaymentMethodId(
-            req.PaymentMethodId,
-            paymentType
-        );
+        var normalizedPaymentMethodId = NormalizePaymentMethodId(req.PaymentMethodId, paymentType);
         var paymentMethod = new Dictionary<string, object?>
         {
             ["id"] = normalizedPaymentMethodId,
@@ -262,10 +259,9 @@ public class MercadoPagoService : IMercadoPagoService
                         {
                             OrderId = local.OrderId,
                             ProviderOrderId = null,
-                            ProviderPaymentId = local.ProviderPaymentIdText
-                                ?? local.ProviderPaymentId?.ToString(
-                                    CultureInfo.InvariantCulture
-                                ),
+                            ProviderPaymentId =
+                                local.ProviderPaymentIdText
+                                ?? local.ProviderPaymentId?.ToString(CultureInfo.InvariantCulture),
                             Status = local.Status,
                             StatusDetail = local.StatusDetail,
                             IsFinal = localIsFinal,
@@ -932,6 +928,52 @@ public class MercadoPagoService : IMercadoPagoService
             request.Headers.Select(h => $"{h.Key}:{string.Join(',', h.Value!)}")
         );
 
+        // signature validation (if configured)
+        var signatureHeader = GetSignatureFromRequestHeaders(request);
+        if (!string.IsNullOrWhiteSpace(_options.MP_WEBHOOK_SECRET))
+        {
+            // if secret configured, require signature and validate
+            if (
+                string.IsNullOrWhiteSpace(signatureHeader)
+                || !VerifySignature(
+                    _options.MP_WEBHOOK_SECRET!,
+                    raw ?? string.Empty,
+                    signatureHeader
+                )
+            )
+            {
+                MPWebhookEvent? savedInvalid = null;
+                try
+                {
+                    savedInvalid = await _webhookService.SaveAsync(
+                        "mercadopago",
+                        "payment",
+                        paymentId,
+                        null,
+                        raw!,
+                        headers,
+                        ct
+                    );
+                }
+                catch { }
+
+                if (savedInvalid is not null)
+                {
+                    await _webhookService.MarkProcessedAsync(
+                        savedInvalid.Id,
+                        false,
+                        "invalid_signature",
+                        null,
+                        responseStatusCode: null,
+                        processingDurationMs: null,
+                        ct: ct
+                    );
+                }
+
+                return ApiResult.Problem(StatusCodes.Status403Forbidden, "invalid_signature");
+            }
+        }
+
         MPWebhookEvent? saved = null;
         try
         {
@@ -940,7 +982,7 @@ public class MercadoPagoService : IMercadoPagoService
                 "payment",
                 paymentId,
                 null,
-                raw,
+                raw!,
                 headers,
                 ct
             );
@@ -949,7 +991,26 @@ public class MercadoPagoService : IMercadoPagoService
 
         if (paymentId is null)
         {
+            _logger.LogInformation("MP webhook: no paymentId resolved, ignoring.");
             return ApiResult.Ok(null);
+        }
+
+        // Deduplicate: if we already processed this providerPaymentId, ignore
+        try
+        {
+            var existing = await _webhookService.GetByProviderPaymentIdAsync(paymentId.Value, ct);
+            if (existing is not null && existing.Processed)
+            {
+                _logger.LogDebug(
+                    "MP webhook: paymentId {paymentId} already processed, skipping.",
+                    paymentId.Value
+                );
+                return ApiResult.Ok(null);
+            }
+        }
+        catch
+        {
+            // ignore db read errors and continue to persist incoming payload
         }
 
         var token = GetWebhookAccessToken();
@@ -959,12 +1020,15 @@ public class MercadoPagoService : IMercadoPagoService
         }
 
         var client = CreateMpClient(token);
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var resp = await client.GetAsync(
             $"https://api.mercadopago.com/v1/payments/{paymentId.Value}",
             ct
         );
         var paymentJson = await resp.Content.ReadAsStringAsync(ct);
+        sw.Stop();
+        var durationMs = (int)sw.ElapsedMilliseconds;
+        var respCode = (int)resp.StatusCode;
         if (!resp.IsSuccessStatusCode)
         {
             if (saved is not null)
@@ -973,6 +1037,9 @@ public class MercadoPagoService : IMercadoPagoService
                     saved.Id,
                     false,
                     $"MP GET failed: {resp.StatusCode}",
+                    null,
+                    responseStatusCode: respCode,
+                    processingDurationMs: durationMs,
                     ct: ct
                 );
             }
@@ -1011,20 +1078,69 @@ public class MercadoPagoService : IMercadoPagoService
                     ct
                 );
 
-                if (TryParsePaymentIntentId(orderId, out var intentId))
+                // Determine if the provider status should trigger an immediate deposit confirmation
+                bool considerApproved = string.Equals(
+                    status,
+                    "approved",
+                    StringComparison.OrdinalIgnoreCase
+                );
+                if (!considerApproved && !string.IsNullOrWhiteSpace(statusDetail))
                 {
-                    try
+                    var sdLower = statusDetail!.ToLowerInvariant();
+                    if (
+                        sdLower.Contains("accredit")
+                        || sdLower.Contains("credited")
+                        || sdLower.Contains("paid")
+                        || sdLower.Contains("accredited")
+                        || sdLower.Contains("settled")
+                    )
+                        considerApproved = true;
+                }
+
+                if (considerApproved)
+                {
+                    // orderId can be a raw GUID or contain a GUID as suffix (e.g. "WALLET_DEPOSIT_{guid}").
+                    Guid? intentId = null;
+                    if (Guid.TryParse(orderId, out var parsed))
+                        intentId = parsed;
+                    else if (!string.IsNullOrWhiteSpace(orderId))
                     {
-                        await _walletService.SyncDepositStatusAsync(
-                            intentId,
-                            status,
-                            statusDetail,
-                            paymentId?.ToString(),
-                            amount,
-                            ct
-                        );
+                        try
+                        {
+                            var m = System.Text.RegularExpressions.Regex.Match(
+                                orderId,
+                                "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+                            );
+                            if (m.Success && Guid.TryParse(m.Value, out var inner))
+                                intentId = inner;
+                        }
+                        catch { }
                     }
-                    catch { }
+
+                    if (intentId.HasValue)
+                    {
+                        try
+                        {
+                            _logger.LogInformation(
+                                "Calling ConfirmDepositAsync for intent {intent} providerPaymentId={p}",
+                                intentId.Value,
+                                paymentId
+                            );
+                            await _walletService.ConfirmDepositAsync(
+                                intentId.Value,
+                                paymentId?.ToString() ?? string.Empty,
+                                ct
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(
+                                ex,
+                                "ConfirmDepositAsync failed for intent {intent}",
+                                intentId.Value
+                            );
+                        }
+                    }
                 }
 
                 if (saved is not null)
@@ -1034,12 +1150,18 @@ public class MercadoPagoService : IMercadoPagoService
                         !string.IsNullOrWhiteSpace(statusDetail)
                         || !string.IsNullOrWhiteSpace(rejectionReason)
                     )
-                    {
                         msg +=
                             $" (status_detail={statusDetail}, rejection_reason={rejectionReason})";
-                    }
 
-                    await _webhookService.MarkProcessedAsync(saved.Id, true, msg, orderId, ct);
+                    await _webhookService.MarkProcessedAsync(
+                        saved.Id,
+                        true,
+                        msg,
+                        orderId,
+                        responseStatusCode: respCode,
+                        processingDurationMs: durationMs,
+                        ct: ct
+                    );
                 }
             }
             else
@@ -1056,7 +1178,15 @@ public class MercadoPagoService : IMercadoPagoService
                             $" (status_detail={statusDetail}, rejection_reason={rejectionReason})";
                     }
 
-                    await _webhookService.MarkProcessedAsync(saved.Id, false, msg, orderId, ct);
+                    await _webhookService.MarkProcessedAsync(
+                        saved.Id,
+                        false,
+                        msg,
+                        orderId,
+                        responseStatusCode: respCode,
+                        processingDurationMs: durationMs,
+                        ct: ct
+                    );
                 }
             }
         }
@@ -1064,7 +1194,15 @@ public class MercadoPagoService : IMercadoPagoService
         {
             if (saved is not null)
             {
-                await _webhookService.MarkProcessedAsync(saved.Id, false, ex.Message, orderId, ct);
+                await _webhookService.MarkProcessedAsync(
+                    saved.Id,
+                    false,
+                    ex.Message,
+                    orderId,
+                    responseStatusCode: null,
+                    processingDurationMs: null,
+                    ct: ct
+                );
             }
         }
 
@@ -1120,6 +1258,51 @@ public class MercadoPagoService : IMercadoPagoService
             request.Headers.Select(h => $"{h.Key}:{string.Join(',', h.Value!)}")
         );
 
+        // signature validation (if configured)
+        var signatureHeader = GetSignatureFromRequestHeaders(request);
+        if (!string.IsNullOrWhiteSpace(_options.MP_WEBHOOK_SECRET))
+        {
+            if (
+                string.IsNullOrWhiteSpace(signatureHeader)
+                || !VerifySignature(
+                    _options.MP_WEBHOOK_SECRET!,
+                    raw ?? string.Empty,
+                    signatureHeader
+                )
+            )
+            {
+                MPWebhookEvent? savedInvalid = null;
+                try
+                {
+                    savedInvalid = await _webhookService.SaveAsync(
+                        "mercadopago",
+                        "order",
+                        null,
+                        orderId,
+                        raw!,
+                        headers,
+                        ct
+                    );
+                }
+                catch { }
+
+                if (savedInvalid is not null)
+                {
+                    await _webhookService.MarkProcessedAsync(
+                        savedInvalid.Id,
+                        false,
+                        "invalid_signature",
+                        orderId,
+                        responseStatusCode: null,
+                        processingDurationMs: null,
+                        ct: ct
+                    );
+                }
+
+                return ApiResult.Problem(StatusCodes.Status403Forbidden, "invalid_signature");
+            }
+        }
+
         MPWebhookEvent? saved = null;
         try
         {
@@ -1128,7 +1311,7 @@ public class MercadoPagoService : IMercadoPagoService
                 "order",
                 null,
                 orderId,
-                raw,
+                raw!,
                 headers,
                 ct
             );
@@ -1147,8 +1330,12 @@ public class MercadoPagoService : IMercadoPagoService
         }
 
         var client = CreateMpClient(token);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var resp = await client.GetAsync($"https://api.mercadopago.com/v1/orders/{orderId}", ct);
         var orderJson = await resp.Content.ReadAsStringAsync(ct);
+        sw.Stop();
+        var durationMs = (int)sw.ElapsedMilliseconds;
+        var respCode = (int)resp.StatusCode;
         if (!resp.IsSuccessStatusCode)
         {
             if (saved is not null)
@@ -1157,6 +1344,9 @@ public class MercadoPagoService : IMercadoPagoService
                     saved.Id,
                     false,
                     $"MP GET failed: {resp.StatusCode}",
+                    orderId,
+                    responseStatusCode: respCode,
+                    processingDurationMs: durationMs,
                     ct: ct
                 );
             }
@@ -1255,6 +1445,8 @@ public class MercadoPagoService : IMercadoPagoService
                         true,
                         msg,
                         externalReference,
+                        responseStatusCode: respCode,
+                        processingDurationMs: durationMs,
                         ct
                     );
                 }
@@ -1278,6 +1470,8 @@ public class MercadoPagoService : IMercadoPagoService
                         false,
                         msg,
                         externalReference,
+                        responseStatusCode: respCode,
+                        processingDurationMs: durationMs,
                         ct
                     );
                 }
@@ -1292,6 +1486,8 @@ public class MercadoPagoService : IMercadoPagoService
                     false,
                     ex.Message,
                     externalReference,
+                    responseStatusCode: respCode,
+                    processingDurationMs: durationMs,
                     ct
                 );
             }
@@ -1413,6 +1609,81 @@ public class MercadoPagoService : IMercadoPagoService
         };
     }
 
+    private static string? GetSignatureFromRequestHeaders(HttpRequest request)
+    {
+        try
+        {
+            var candidates = new[]
+            {
+                "X-Hub-Signature",
+                "X-Hub-Signature-256",
+                "X-Callback-Signature",
+                "X-Mercadopago-Signature",
+                "X-MP-Signature",
+                "Signature",
+            };
+
+            foreach (var key in candidates)
+            {
+                if (request.Headers.TryGetValue(key, out var vals) && vals.Count > 0)
+                    return vals.First();
+            }
+
+            // fallback: check any header that contains "signature"
+            foreach (var h in request.Headers)
+            {
+                if (h.Key?.IndexOf("signature", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return h.Value.FirstOrDefault();
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    private static bool VerifySignature(string secret, string payload, string signatureHeader)
+    {
+        try
+        {
+            var sig = signatureHeader.Trim();
+            // strip possible prefix like sha256=
+            var idx = sig.IndexOf('=');
+            if (idx > 0)
+                sig = sig.Substring(idx + 1);
+
+            var key = System.Text.Encoding.UTF8.GetBytes(secret);
+            using var hmac = new System.Security.Cryptography.HMACSHA256(key);
+            var hash = hmac.ComputeHash(
+                System.Text.Encoding.UTF8.GetBytes(payload ?? string.Empty)
+            );
+            var hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            var b64 = Convert.ToBase64String(hash);
+
+            if (string.Equals(sig, hex, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(sig, b64, StringComparison.Ordinal))
+                return true;
+
+            // Also accept URL-encoded or padded variants
+            try
+            {
+                var decoded = System.Net.WebUtility.UrlDecode(sig);
+                if (
+                    !string.IsNullOrWhiteSpace(decoded)
+                    && (
+                        string.Equals(decoded, hex, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(decoded, b64, StringComparison.Ordinal)
+                    )
+                )
+                    return true;
+            }
+            catch { }
+        }
+        catch { }
+
+        return false;
+    }
+
     private static bool TryGetDecimal(JsonElement element, string propertyName, out decimal value)
     {
         value = default;
@@ -1461,7 +1732,10 @@ public class MercadoPagoService : IMercadoPagoService
 
     private static string? TryGetCustomerIdFromSearch(JsonElement root)
     {
-        if (root.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+        if (
+            root.TryGetProperty("results", out var results)
+            && results.ValueKind == JsonValueKind.Array
+        )
         {
             foreach (var item in results.EnumerateArray())
             {

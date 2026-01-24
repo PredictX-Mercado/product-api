@@ -34,6 +34,15 @@ public interface IUserService
         CancellationToken ct = default
     );
 
+    Task<ApiResult> GetAllApiAsync(
+        string? query,
+        string? by,
+        bool startsWith,
+        int page,
+        int pageSize,
+        CancellationToken ct = default
+    );
+
     Task<ServiceResult<UserView>> GetMeAsync(Guid userId, CancellationToken ct = default);
     Task<ServiceResult<UserView>> UpdateProfileAsync(
         Guid userId,

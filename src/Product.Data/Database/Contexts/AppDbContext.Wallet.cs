@@ -13,4 +13,5 @@ public partial class AppDbContext
     public DbSet<UserPixKey> UserPixKeys => Set<UserPixKey>();
     public DbSet<PaymentIntent> PaymentIntents => Set<PaymentIntent>();
     public DbSet<Withdrawal> Withdrawals => Set<Withdrawal>();
+    public DbSet<Receipt> Receipts => Set<Receipt>();
 }

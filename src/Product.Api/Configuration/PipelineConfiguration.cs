@@ -10,6 +10,8 @@ public static class PipelineConfiguration
     public static WebApplication UseApiPipeline(this WebApplication app)
     {
         app.UseMiddleware<Middlewares.CorrelationIdMiddleware>();
+        app.UseMiddleware<Middlewares.ExceptionLoggingMiddleware>();
+        app.UseMiddleware<Middlewares.RequestLoggingMiddleware>();
         app.UseSerilogRequestLogging();
         app.UseProblemDetails();
         app.UseCors("Allowlist");

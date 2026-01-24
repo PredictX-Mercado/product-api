@@ -22,30 +22,6 @@ namespace Product.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ClaimType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("AspNetRoleClaims", (string)null);
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
                 {
                     b.Property<int>("Id")
@@ -89,21 +65,6 @@ namespace Product.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("AspNetUserLogins", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("AspNetUserRoles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
@@ -162,8 +123,6 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatedAt");
-
                     b.ToTable("AuditLogs");
                 });
 
@@ -194,10 +153,7 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "ExpiresAt");
+                    b.HasIndex("UserId");
 
                     b.ToTable("EmailVerificationTokens");
                 });
@@ -229,10 +185,7 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "ExpiresAt");
+                    b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens");
                 });
@@ -267,9 +220,6 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
                     b.ToTable("RefreshTokens");
                 });
 
@@ -290,39 +240,273 @@ namespace Product.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("LastError")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("SentAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Subject")
                         .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("text");
 
                     b.Property<string>("TextBody")
                         .HasColumnType("text");
 
                     b.Property<string>("ToEmail")
                         .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("text");
 
                     b.Property<string>("ToName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SentAt");
+                    b.ToTable("QueuedEmails");
+                });
 
-                    b.HasIndex("SentAt", "CreatedAt");
+            modelBuilder.Entity("Product.Data.Models.Markets.Categories.Category", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
 
-                    b.ToTable("QueuedEmails", (string)null);
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Slug")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Markets.IdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultPayload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("IdempotencyRecords");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Markets.Market", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ClosingDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatorEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Featured")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("LowLiquidityWarning")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("NoContracts")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("NoPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ProbabilityBucket")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ResolutionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolutionSource")
+                        .HasColumnType("text");
+
+                    b.Property<byte[]>("RowVersion")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("SearchSnippet")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tags")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Volatility24h")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Volume24h")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("VolumeTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("YesContracts")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("YesPrice")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Markets");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Markets.MarketCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MarketId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("MarketId");
+
+                    b.ToTable("MarketCategories");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Markets.Position", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AveragePrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Contracts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MarketId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalInvested")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Positions");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Markets.Transaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("MarketId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MarketTransactions");
                 });
 
             modelBuilder.Entity("Product.Data.Models.Orders.Order", b =>
@@ -332,8 +516,7 @@ namespace Product.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -343,38 +526,32 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("OrderId")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("PaymentMethod")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<long?>("ProviderPaymentId")
                         .HasColumnType("bigint");
 
                     b.Property<string>("ProviderPaymentIdText")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<string>("StatusDetail")
                         .HasColumnType("text");
@@ -384,13 +561,96 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderId");
-
-                    b.HasIndex("ProviderPaymentId");
-
-                    b.HasIndex("ProviderPaymentIdText");
-
                     b.ToTable("Orders");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Users.ApplicationUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AccessFailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("EmailVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("LockoutEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalizedEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("NormalizedUserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("PhoneNumberConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RoleRaw")
+                        .HasColumnType("text")
+                        .HasColumnName("Role");
+
+                    b.Property<string>("SecurityStamp")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("TwoFactorEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedEmail")
+                        .HasDatabaseName("EmailIndex");
+
+                    b.HasIndex("NormalizedUserName")
+                        .IsUnique()
+                        .HasDatabaseName("UserNameIndex");
+
+                    b.ToTable("AspNetUsers", (string)null);
                 });
 
             modelBuilder.Entity("Product.Data.Models.Users.PaymentsMethods.UserBankAccount", b =>
@@ -522,136 +782,6 @@ namespace Product.Data.Migrations
                     b.ToTable("UserPixKeys");
                 });
 
-            modelBuilder.Entity("Product.Data.Models.Users.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("NormalizedName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("RoleNameIndex");
-
-                    b.ToTable("AspNetRoles", (string)null);
-                });
-
-            modelBuilder.Entity("Product.Data.Models.Users.User", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("AvatarUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Email")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("EmailVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("NormalizedEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("NormalizedName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("NormalizedUserName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("NormalizedUsername");
-
-                    b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("SecurityStamp")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("Username");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.HasIndex("NormalizedEmail")
-                        .IsUnique()
-                        .HasDatabaseName("EmailIndex");
-
-                    b.HasIndex("NormalizedUserName")
-                        .IsUnique()
-                        .HasDatabaseName("UserNameIndex");
-
-                    b.HasIndex("UserName")
-                        .IsUnique();
-
-                    b.ToTable("AspNetUsers", (string)null);
-                });
-
             modelBuilder.Entity("Product.Data.Models.Users.UserAddress", b =>
                 {
                     b.Property<Guid>("Id")
@@ -660,49 +790,41 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("City")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Complement")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Country")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Neighborhood")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Number")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("PersonalDataId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("State")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Street")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ZipCode")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -735,9 +857,6 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Cpf")
-                        .IsUnique();
-
                     b.HasIndex("UserId")
                         .IsUnique();
 
@@ -755,10 +874,7 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasDefaultValue("BRL");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -768,8 +884,7 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Currency")
-                        .IsUnique();
+                    b.HasIndex("UserId");
 
                     b.ToTable("Accounts");
                 });
@@ -784,15 +899,13 @@ namespace Product.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("IdempotencyKey")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("MetaJson")
                         .HasColumnType("text");
@@ -801,8 +914,7 @@ namespace Product.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("ReferenceType")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("text");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
@@ -812,10 +924,7 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("AccountId", "CreatedAt");
+                    b.HasIndex("AccountId");
 
                     b.ToTable("LedgerEntries");
                 });
@@ -827,33 +936,28 @@ namespace Product.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ExternalPaymentId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -866,14 +970,58 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExternalPaymentId");
-
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "CreatedAt");
+                    b.HasIndex("UserId");
 
                     b.ToTable("PaymentIntents");
+                });
+
+            modelBuilder.Entity("Product.Data.Models.Wallet.Receipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("ProviderPaymentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProviderPaymentIdText")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReferenceType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Receipts");
                 });
 
             modelBuilder.Entity("Product.Data.Models.Wallet.Withdrawal", b =>
@@ -883,8 +1031,7 @@ namespace Product.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasColumnType("numeric");
 
                     b.Property<DateTimeOffset?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
@@ -897,17 +1044,14 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("text");
 
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Notes")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -920,10 +1064,7 @@ namespace Product.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "CreatedAt");
+                    b.HasIndex("UserId");
 
                     b.ToTable("Withdrawals");
                 });
@@ -942,12 +1083,10 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("EventType")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Headers")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
+                        .HasColumnType("text");
 
                     b.Property<string>("OrderId")
                         .HasColumnType("text");
@@ -962,13 +1101,15 @@ namespace Product.Data.Migrations
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("ProcessingDurationMs")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ProcessingResult")
                         .HasColumnType("text");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<long?>("ProviderPaymentId")
                         .HasColumnType("bigint");
@@ -976,28 +1117,23 @@ namespace Product.Data.Migrations
                     b.Property<DateTimeOffset>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("ResponseStatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SignatureHeader")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProviderPaymentId");
-
                     b.ToTable("MPWebhookEvent");
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
-                {
-                    b.HasOne("Product.Data.Models.Users.Role", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", null)
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1006,22 +1142,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
-                {
-                    b.HasOne("Product.Data.Models.Users.Role", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Product.Data.Models.Users.User", null)
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1030,7 +1151,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", null)
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1039,7 +1160,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Auth.EmailVerificationToken", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1050,7 +1171,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Auth.PasswordResetToken", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1059,9 +1180,28 @@ namespace Product.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Product.Data.Models.Markets.MarketCategory", b =>
+                {
+                    b.HasOne("Product.Data.Models.Markets.Categories.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Product.Data.Models.Markets.Market", "Market")
+                        .WithMany()
+                        .HasForeignKey("MarketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Market");
+                });
+
             modelBuilder.Entity("Product.Data.Models.Users.PaymentsMethods.UserBankAccount", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1072,7 +1212,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Users.PaymentsMethods.UserCard", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1083,7 +1223,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Users.PaymentsMethods.UserPixKey", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1105,7 +1245,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Users.UserPersonalData", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithOne("PersonalData")
                         .HasForeignKey("Product.Data.Models.Users.UserPersonalData", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1116,7 +1256,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Wallet.Account", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1138,7 +1278,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Wallet.PaymentIntent", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1149,7 +1289,7 @@ namespace Product.Data.Migrations
 
             modelBuilder.Entity("Product.Data.Models.Wallet.Withdrawal", b =>
                 {
-                    b.HasOne("Product.Data.Models.Users.User", "User")
+                    b.HasOne("Product.Data.Models.Users.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1158,7 +1298,7 @@ namespace Product.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Product.Data.Models.Users.User", b =>
+            modelBuilder.Entity("Product.Data.Models.Users.ApplicationUser", b =>
                 {
                     b.Navigation("PersonalData");
                 });
