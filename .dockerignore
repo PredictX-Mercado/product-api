@@ -1,0 +1,23 @@
+# Ignore build outputs
+**/bin/
+**/obj/
+
+# Git and editor
+.git
+.vscode
+.idea
+
+# Local environment and secrets
+.env
+*.local
+
+# Node / package artifacts (if any)
+node_modules
+
+# Logs and temp
+*.log
+tmp/
+temp/
+
+# OS files
+**/.DS_Store
