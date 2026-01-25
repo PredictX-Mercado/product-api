@@ -147,6 +147,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IWebhookRepository, WebhookRepository>();
+        services.AddScoped<IMercadoPagoRepository, MercadoPagoRepository>();
         services.AddScoped<IWalletRepository, WalletRepository>();
         services.AddScoped<IDbMigrationRepository, DbMigrationRepository>();
         services.AddScoped<IMarketRepository, MarketRepository>();

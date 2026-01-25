@@ -14,7 +14,10 @@ public interface IMercadoPagoRepository
         CancellationToken ct = default
     );
 
-    Task<MPWebhookEvent?> GetByProviderPaymentIdAsync(long providerPaymentId, CancellationToken ct = default);
+    Task<MPWebhookEvent?> GetByProviderPaymentIdAsync(
+        long providerPaymentId,
+        CancellationToken ct = default
+    );
 
     Task<MPWebhookEvent?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
