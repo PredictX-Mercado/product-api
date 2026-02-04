@@ -13,7 +13,7 @@ public static class CorsConfiguration
             "http://localhost:5280",
             "https://genuine-husky-secondly.ngrok-free.app",
             "https://cladocarpous-cryptogrammatical-yasmin.ngrok-free.dev",
-            "https://predizer.com.br/",
+            "https://predizer.com.br",
             "https://predizerapi.onrender.com",
         };
 
