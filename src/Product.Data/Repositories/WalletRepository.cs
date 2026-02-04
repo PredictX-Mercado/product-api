@@ -101,6 +101,20 @@ public class WalletRepository(AppDbContext db) : IWalletRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<PaymentIntent>> GetPaymentIntentsByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken ct = default
+    )
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+        {
+            return new List<PaymentIntent>();
+        }
+
+        return await db.PaymentIntents.Where(pi => idList.Contains(pi.Id)).ToListAsync(ct);
+    }
+
     public async Task<Withdrawal?> GetWithdrawalByIdAsync(
         Guid withdrawalId,
         CancellationToken ct = default
@@ -273,6 +287,123 @@ public class WalletRepository(AppDbContext db) : IWalletRepository
     public async Task<Receipt?> GetReceiptByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await db.Receipts.FirstOrDefaultAsync(r => r.Id == id, ct);
+    }
+
+    public async Task<List<Product.Data.Models.Markets.Market>> GetMarketsByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken ct = default
+    )
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+        {
+            return new List<Product.Data.Models.Markets.Market>();
+        }
+
+        return await db.Markets.Where(m => idList.Contains(m.Id)).ToListAsync(ct);
+    }
+
+    public async Task<List<PaymentIntent>> GetApprovedPaymentIntentsWithoutReceiptAsync(
+        int take,
+        CancellationToken ct = default
+    )
+    {
+        // A intent está coberta se houver recibo apontando para ela diretamente
+        // ou se houver recibo apontando para o ledger entry gerado a partir dela.
+        var coveredIntentIds =
+            from r in db.Receipts
+            where r.ReferenceId != null
+            join le in db.LedgerEntries on r.ReferenceId equals le.Id into leJoin
+            from le in leJoin.DefaultIfEmpty()
+            select new
+            {
+                DirectIntentId = r.ReferenceType == "PaymentIntent" ? r.ReferenceId : null,
+                LedgerIntentId = le != null && le.ReferenceType == "PaymentIntent"
+                    ? le.ReferenceId
+                    : null,
+            };
+
+        var coveredIds = await coveredIntentIds
+            .Select(x => x.DirectIntentId ?? x.LedgerIntentId)
+            .Where(id => id != null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return await db
+            .PaymentIntents.Where(pi => pi.Status == Common.Enums.PaymentIntentStatus.APPROVED)
+            .Where(pi => !coveredIds.Contains(pi.Id))
+            .OrderBy(pi => pi.CreatedAt)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public async Task<bool> ReceiptExistsForReferenceAsync(
+        Guid referenceId,
+        CancellationToken ct = default
+    )
+    {
+        return await db.Receipts.AnyAsync(r => r.ReferenceId == referenceId, ct);
+    }
+
+    public async Task<
+        List<Product.Data.Models.Markets.Transaction>
+    > GetBuyTransactionsWithoutReceiptAsync(int take, CancellationToken ct = default)
+    {
+        // Coberta se houver recibo referenciando a própria transação ou o ledger gerado para ela.
+        var coveredTxIds =
+            from r in db.Receipts
+            where r.ReferenceId != null
+            join le in db.LedgerEntries on r.ReferenceId equals le.Id into leJoin
+            from le in leJoin.DefaultIfEmpty()
+            select new
+            {
+                DirectTxId = r.ReferenceType == "MarketTransaction" ? r.ReferenceId : null,
+                LedgerTxId = le != null && le.ReferenceType == "market_trade"
+                    ? le.ReferenceId
+                    : null,
+            };
+
+        var coveredIds = await coveredTxIds
+            .Select(x => x.DirectTxId ?? x.LedgerTxId)
+            .Where(id => id != null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return await db
+            .MarketTransactions.Where(mt => mt.Type == "buy")
+            .Where(mt => !coveredIds.Contains(mt.Id))
+            .OrderBy(mt => mt.CreatedAt)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public async Task<LedgerEntry?> FindLedgerEntryForBuyAsync(
+        Guid userId,
+        Guid marketId,
+        decimal amount,
+        DateTimeOffset txCreatedAt,
+        CancellationToken ct = default
+    )
+    {
+        var accountIds = await db
+            .Accounts.Where(a => a.UserId == userId)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        if (accountIds.Count == 0)
+            return null;
+
+        var query = db
+            .LedgerEntries.Where(le =>
+                accountIds.Contains(le.AccountId)
+                && le.ReferenceType == "market_trade"
+                && le.ReferenceId == marketId
+                && le.Amount == amount
+            )
+            .OrderByDescending(le => le.CreatedAt);
+
+        return await query.FirstOrDefaultAsync(ct);
     }
 
     public async Task AddUserAsync(ApplicationUser user, CancellationToken ct = default)

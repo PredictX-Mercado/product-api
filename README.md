@@ -1,6 +1,6 @@
-# PredictX back
+# Predizer back
 
-API em .NET 8 para o back-end do PredictX. Inclui autenticacao com ASP.NET Core Identity (cookies e bearer tokens), EF Core com PostgreSQL e Swagger para exploracao dos endpoints.
+API em .NET 8 para o back-end do Predizer. Inclui autenticacao com ASP.NET Core Identity (cookies e bearer tokens), EF Core com PostgreSQL e Swagger para exploracao dos endpoints.
 
 ## Requisitos
 

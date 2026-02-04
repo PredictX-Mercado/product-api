@@ -9,9 +9,11 @@ namespace Product.Api.Controllers;
 [ApiController]
 [Route("api/v1/wallet")]
 [Authorize]
-public class WalletController(IWalletService walletService) : ControllerBase
+public class WalletController(IWalletService walletService, IReceiptService receiptService)
+    : ControllerBase
 {
     private readonly IWalletService _walletService = walletService;
+    private readonly IReceiptService _receiptService = receiptService;
 
     [HttpGet("balances")]
     public async Task<IActionResult> GetBalances(CancellationToken ct)
@@ -90,14 +92,14 @@ public class WalletController(IWalletService walletService) : ControllerBase
         CancellationToken ct
     )
     {
-        var result = await _walletService.GetReceiptsApiAsync(User, cursor, limit, ct);
+        var result = await _receiptService.GetReceiptsApiAsync(User, cursor, limit, ct);
         return this.ToActionResult(result);
     }
 
     [HttpGet("receipts/{receiptId:guid}")]
     public async Task<IActionResult> GetReceipt(Guid receiptId, CancellationToken ct)
     {
-        var result = await _walletService.GetReceiptApiAsync(User, receiptId, ct);
+        var result = await _receiptService.GetReceiptApiAsync(User, receiptId, ct);
         return this.ToActionResult(result);
     }
 

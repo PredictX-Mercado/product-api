@@ -20,7 +20,8 @@ public class MercadoPagoCheckoutApiController(
 {
     private readonly IMercadoPagoService _mercadoPagoService = mercadoPagoService;
     private readonly IPaymentMethodRepository _paymentMethodRepository = paymentMethodRepository;
-    private readonly Microsoft.Extensions.Logging.ILogger<MercadoPagoCheckoutApiController> _logger = logger;
+    private readonly Microsoft.Extensions.Logging.ILogger<MercadoPagoCheckoutApiController> _logger =
+        logger;
 
     [HttpPost("orders/card")]
     public async Task<IActionResult> CreateCardOrder(
@@ -28,7 +29,11 @@ public class MercadoPagoCheckoutApiController(
         CancellationToken ct = default
     )
     {
-        _logger.LogInformation("CreateCardOrder called: OrderId={OrderId}, Amount={Amount}", req.OrderId, req.Amount);
+        _logger.LogInformation(
+            "CreateCardOrder called: OrderId={OrderId}, Amount={Amount}",
+            req.OrderId,
+            req.Amount
+        );
         var deviceId = Request.Headers["X-meli-session-id"].ToString();
         if (string.IsNullOrWhiteSpace(deviceId))
             deviceId = req.DeviceId ?? string.Empty;
@@ -38,7 +43,8 @@ public class MercadoPagoCheckoutApiController(
         req.Payer ??= new CardPayer();
 
         // ✅ fluxo cartão salvo (sem token)
-        var usingSavedCard = string.IsNullOrWhiteSpace(req.Token) && !string.IsNullOrWhiteSpace(req.MpCardId);
+        var usingSavedCard =
+            string.IsNullOrWhiteSpace(req.Token) && !string.IsNullOrWhiteSpace(req.MpCardId);
 
         // se veio mpCardId e não veio identification => busca no banco
         if (usingSavedCard && req.Payer.Identification is null)
@@ -53,9 +59,16 @@ public class MercadoPagoCheckoutApiController(
 
                 if (card is not null)
                 {
-                    _logger.LogInformation("Found saved card for user {UserId} mpCardId={MpCardId}", userId, req.MpCardId);
+                    _logger.LogInformation(
+                        "Found saved card for user {UserId} mpCardId={MpCardId}",
+                        userId,
+                        req.MpCardId
+                    );
                     // ✅ completa nome do titular
-                    if (!string.IsNullOrWhiteSpace(card.CardHolderName) && string.IsNullOrWhiteSpace(req.Payer.CardholderName))
+                    if (
+                        !string.IsNullOrWhiteSpace(card.CardHolderName)
+                        && string.IsNullOrWhiteSpace(req.Payer.CardholderName)
+                    )
                         req.Payer.CardholderName = card.CardHolderName;
 
                     // ✅ completa CPF/CNPJ
@@ -63,8 +76,9 @@ public class MercadoPagoCheckoutApiController(
                     {
                         req.Payer.Identification = new Identification
                         {
-                            Type = card.CardHolderDocumentType
-                                   ?? (card.CardHolderDocumentNumber.Length > 11 ? "CNPJ" : "CPF"),
+                            Type =
+                                card.CardHolderDocumentType
+                                ?? (card.CardHolderDocumentNumber.Length > 11 ? "CNPJ" : "CPF"),
                             Number = card.CardHolderDocumentNumber,
                         };
                     }
@@ -82,14 +96,23 @@ public class MercadoPagoCheckoutApiController(
         {
             var cvv = OnlyDigits(req.SecurityCode);
             if (cvv.Length < 3)
-                return BadRequest(new { message = "CVV é obrigatório para pagar com cartão salvo." });
+                return BadRequest(
+                    new { message = "CVV é obrigatório para pagar com cartão salvo." }
+                );
 
             req.SecurityCode = cvv;
         }
 
-        _logger.LogInformation("Calling MercadoPagoService.CreateCardOrderAsync for OrderId={OrderId}", req.OrderId);
+        _logger.LogInformation(
+            "Calling MercadoPagoService.CreateCardOrderAsync for OrderId={OrderId}",
+            req.OrderId
+        );
         var result = await _mercadoPagoService.CreateCardOrderAsync(req, deviceId, ct);
-        _logger.LogInformation("CreateCardOrder result: Status={Status} Error={Error}", result.StatusCode, result.Error);
+        _logger.LogInformation(
+            "CreateCardOrder result: Status={Status} Error={Error}",
+            result.StatusCode,
+            result.Error
+        );
         return this.ToActionResult(result);
     }
 

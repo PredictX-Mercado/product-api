@@ -39,13 +39,22 @@ public class WebhookService : IWebhookService
             );
         }
 
+        var payloadHash = HeaderUtils.ComputeSha256(payload ?? string.Empty);
+
+        var existing = await _webhookRepository.GetByPayloadHashAsync(payloadHash, ct);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
         var ev = new MPWebhookEvent
         {
             Provider = provider,
             EventType = eventType,
             ProviderPaymentId = providerPaymentId,
             OrderId = orderId,
-            Payload = payload,
+            Payload = payload!,
+            PayloadHash = payloadHash,
             Headers = headers,
             SignatureHeader = HeaderUtils.ExtractSignatureFromHeaders(headers),
             ReceivedAt = DateTimeOffset.UtcNow,
@@ -105,5 +114,30 @@ public class WebhookService : IWebhookService
         if (!string.IsNullOrWhiteSpace(orderId))
             ev.OrderId = orderId;
         await _webhookRepository.UpdateAsync(ev, ct);
+    }
+
+    public async Task<int> CleanupUnprocessedAsync(int take, CancellationToken ct = default)
+    {
+        var repo = _mpRepository as IMercadoPagoRepository ?? null;
+        var list = repo is not null
+            ? await repo.GetUnprocessedAsync(take, ct)
+            : await _webhookRepository.GetUnprocessedAsync(take, ct);
+        if (list.Count == 0)
+            return 0;
+
+        foreach (var ev in list)
+        {
+            await MarkProcessedAsync(
+                ev.Id,
+                true,
+                "manual_cleanup",
+                ev.OrderId,
+                ev.ResponseStatusCode,
+                ev.ProcessingDurationMs,
+                ct
+            );
+        }
+
+        return list.Count;
     }
 }

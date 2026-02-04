@@ -473,6 +473,48 @@ namespace Product.Data.Migrations
                     b.ToTable("Positions");
                 });
 
+            modelBuilder.Entity("Product.Data.Models.Markets.RiskTerms", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("MarketId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TermHash")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TermSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TermVersion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RiskTerms");
+                });
+
             modelBuilder.Entity("Product.Data.Models.Markets.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -520,9 +562,6 @@ namespace Product.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Credited")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Currency")
                         .IsRequired()
@@ -916,8 +955,9 @@ namespace Product.Data.Migrations
                     b.Property<string>("ReferenceType")
                         .HasColumnType("text");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -938,6 +978,9 @@ namespace Product.Data.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("CheckoutUrl")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -951,16 +994,30 @@ namespace Product.Data.Migrations
                     b.Property<string>("ExternalPaymentId")
                         .HasColumnType("text");
 
+                    b.Property<string>("ExternalReference")
+                        .HasColumnType("text");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PixQrCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PixQrCodeBase64")
                         .HasColumnType("text");
 
                     b.Property<string>("Provider")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -984,6 +1041,9 @@ namespace Product.Data.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("CheckoutUrl")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -991,7 +1051,31 @@ namespace Product.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalPaymentId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("MarketId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MarketSlugSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MarketTitleSnapshot")
+                        .HasColumnType("text");
+
                     b.Property<string>("PayloadJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("PaymentExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PaymentIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentMethod")
                         .HasColumnType("text");
 
                     b.Property<string>("Provider")
@@ -1053,8 +1137,9 @@ namespace Product.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1093,6 +1178,9 @@ namespace Product.Data.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayloadHash")
                         .HasColumnType("text");
 
                     b.Property<bool>("Processed")

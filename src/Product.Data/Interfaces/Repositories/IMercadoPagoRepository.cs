@@ -19,7 +19,11 @@ public interface IMercadoPagoRepository
         CancellationToken ct = default
     );
 
+    Task<MPWebhookEvent?> GetByPayloadHashAsync(string payloadHash, CancellationToken ct = default);
+
     Task<MPWebhookEvent?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    Task<List<MPWebhookEvent>> GetUnprocessedAsync(int take, CancellationToken ct = default);
 
     Task MarkProcessedAsync(
         Guid id,

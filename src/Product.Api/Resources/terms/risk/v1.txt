@@ -1,0 +1,43 @@
+CONTRATO DE CIÊNCIA DE RISCO E OPERAÇÃO EM MERCADO DE PREVISÕES
+
+1) PARTES
+1.1) EMPRESA: EMPRESA PADRAO LTDA, pessoa jurídica de direito privado, inscrita no CNPJ sob o número 00.000.000/0000-00, com sede na Rua Exemplo, 123, Cidade/UF, doravante denominada "EMPRESA".
+1.2) USUÁRIO: {USER_FULLNAME}, portador do CPF {USER_CPF}, residente e domiciliado {USER_ADDRESS}, CEP {USER_ZIP}, doravante denominado "USUÁRIO".
+
+2) OBJETO
+O presente instrumento tem por objeto formalizar a ciência, a compreensão e a aceitação expressa, pelo USUÁRIO, dos riscos, condições e regras inerentes à realização de operações de previsão na plataforma disponibilizada pela EMPRESA, bem como estabelecer as declarações essenciais para o aceite eletrônico.
+
+3) DECLARAÇÕES GERAIS E ASSUNÇÃO DE RISCO
+3.1) O USUÁRIO declara, para todos os fins, que leu integralmente este contrato, compreendeu seu conteúdo e aceita seus termos de forma livre e consciente.
+3.2) O USUÁRIO reconhece que as operações realizadas na plataforma envolvem risco elevado, inclusive com possibilidade de perda total dos valores alocados, assumindo integral responsabilidade por suas decisões.
+3.3) O USUÁRIO declara que utiliza recursos próprios e disponíveis, compatíveis com sua capacidade financeira, e que não compromete valores indispensáveis ao seu sustento ou ao de terceiros sob sua responsabilidade.
+
+4) RISCO DE PERDA TOTAL, VOLATILIDADE E EVENTOS IMPREVISÍVEIS
+4.1) O USUÁRIO declara ciência de que pode perder integralmente (100%) o valor alocado, inclusive chegando a R$ 0,00, sem direito a reembolso.
+4.2) O USUÁRIO reconhece que variações rápidas, mudanças de cenário, ruídos informacionais, eventos de alta relevância, falhas de previsibilidade e fatores externos podem ocasionar perdas imediatas e/ou significativas, inclusive sem tempo hábil para reação.
+4.3) O USUÁRIO reconhece que resultados passados, estimativas, probabilidades exibidas, indicadores, conteúdos informativos ou simulações não constituem garantia de resultado.
+
+5) TAXAS, CUSTOS E IMPACTO NO RESULTADO
+5.1) O USUÁRIO está ciente de que a EMPRESA poderá cobrar taxas e/ou custos operacionais, conforme política vigente e informações apresentadas no momento da operação (ex.: taxa de depósito e taxa de saque).
+5.2) O USUÁRIO reconhece que taxas e custos impactam o resultado final, podendo reduzir ganhos e ampliar perdas, responsabilizando-se por considerar tais valores no cálculo de risco e retorno.
+5.3) A EMPRESA poderá alterar percentuais, limites, prazos e regras de cobrança, mediante atualização das políticas e comunicação na plataforma, aplicando-se as condições vigentes no momento de cada operação, salvo disposição expressa em contrário.
+
+6) NÃO É INVESTIMENTO; AUSÊNCIA DE ASSESSORIA E DE PROMESSA DE RETORNO
+6.1) O USUÁRIO reconhece que a plataforma não constitui produto de poupança, renda fixa, fundo, valor mobiliário ou investimento com retorno garantido.
+6.2) O USUÁRIO declara que não recebeu recomendação, consultoria, assessoria ou orientação individualizada de natureza financeira, econômica, jurídica ou tributária por parte da EMPRESA.
+6.3) O USUÁRIO reconhece que não há promessa, garantia ou expectativa assegurada de lucro, sendo eventual resultado positivo incerto e dependente de fatores externos e da própria decisão do USUÁRIO.
+
+7) RISCOS COMPORTAMENTAIS E VULNERABILIDADE EMOCIONAL
+7.1) O USUÁRIO reconhece que operações de previsão podem afetar emoção e comportamento, podendo intensificar ansiedade, impulsividade e condutas compulsivas.
+7.2) O USUÁRIO declara que, caso esteja sob estresse financeiro, luto, ansiedade, fragilidade emocional ou qualquer condição que reduza seu discernimento, deverá abster-se de operar.
+7.3) O USUÁRIO reconhece como sinais de alerta, dentre outros: (i) operar para recuperar prejuízo; (ii) aumentar frequência e/ou valor das operações; (iii) ocultar o comportamento; (iv) priorizar operações em detrimento da vida pessoal, trabalho ou família; (v) persistir apesar de danos financeiros, emocionais ou sociais.
+
+8) ACEITE ELETRÔNICO, REGISTRO E PROVA
+8.1) Ao clicar em "Aceito e desejo prosseguir", o USUÁRIO manifesta aceite eletrônico válido e vinculante, nos termos da legislação aplicável, equiparando-se, para todos os fins, à assinatura.
+8.2) O USUÁRIO autoriza a EMPRESA a registrar, para fins de auditoria, segurança e conformidade: (i) data e hora do aceite (incluindo fuso/UTC quando aplicável); (ii) identificação do USUÁRIO (conforme cadastro); (iii) versão do termo aceito; (iv) identificadores internos relacionados à operação (ex.: MarketId); e (v) hash/assinatura digital do conteúdo exibido no momento do aceite.
+8.3) O USUÁRIO reconhece a validade dos registros eletrônicos mantidos pela EMPRESA como meio de prova, ressalvada a possibilidade de demonstração de eventual divergência por meios idôneos.
+
+9) DISPOSIÇÕES FINAIS
+9.1) Se qualquer disposição deste contrato for considerada inválida, ilegal ou inexequível, as demais permanecerão em pleno vigor.
+9.2) Este contrato aplica-se a todas as operações realizadas pelo USUÁRIO na plataforma, enquanto vigente a relação contratual, sem prejuízo de termos complementares exibidos no fluxo de uso.
+9.3) O USUÁRIO declara estar ciente de que o não cumprimento das regras da plataforma pode implicar limitações operacionais, bloqueios preventivos e outras medidas de segurança, conforme políticas internas e legislação aplicável.

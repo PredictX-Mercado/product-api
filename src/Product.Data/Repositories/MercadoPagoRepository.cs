@@ -22,13 +22,22 @@ public class MercadoPagoRepository : IMercadoPagoRepository
         CancellationToken ct = default
     )
     {
+        var payloadHash = HeaderUtils.ComputeSha256(payload ?? string.Empty);
+
+        var existingByHash = await GetByPayloadHashAsync(payloadHash, ct);
+        if (existingByHash is not null)
+        {
+            return existingByHash;
+        }
+
         var ev = new MPWebhookEvent
         {
             Provider = provider,
             EventType = eventType,
             ProviderPaymentId = providerPaymentId,
             OrderId = orderId,
-            Payload = payload,
+            Payload = payload!,
+            PayloadHash = payloadHash,
             Headers = headers,
             SignatureHeader = HeaderUtils.ExtractSignatureFromHeaders(headers),
             ReceivedAt = DateTimeOffset.UtcNow,
@@ -51,9 +60,30 @@ public class MercadoPagoRepository : IMercadoPagoRepository
         );
     }
 
+    public async Task<MPWebhookEvent?> GetByPayloadHashAsync(
+        string payloadHash,
+        CancellationToken ct = default
+    )
+    {
+        return await _db.MPWebhookEvent.FirstOrDefaultAsync(w => w.PayloadHash == payloadHash, ct);
+    }
+
     public async Task<MPWebhookEvent?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await _db.MPWebhookEvent.FindAsync([id], ct);
+    }
+
+    public async Task<List<MPWebhookEvent>> GetUnprocessedAsync(
+        int take,
+        CancellationToken ct = default
+    )
+    {
+        return await _db.MPWebhookEvent
+            .Where(w => !w.Processed)
+            .OrderBy(w => w.ReceivedAt)
+            .ThenBy(w => w.Id)
+            .Take(take)
+            .ToListAsync(ct);
     }
 
     public async Task MarkProcessedAsync(

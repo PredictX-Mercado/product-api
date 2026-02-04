@@ -1,11 +1,15 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Product.Business.Interfaces.Auth;
 using Product.Business.Interfaces.Categories;
 using Product.Business.Interfaces.Users;
 using Product.Common.Enums;
+using Product.Data.Database.Contexts;
 using Product.Data.Interfaces.Repositories;
+using Product.Data.Models.Markets;
 using Product.Data.Models.Users;
 using Product.Data.Models.Users.PaymentsMethods;
 using Product.Data.Models.Wallet;
@@ -19,7 +23,8 @@ public class DatabaseSeeder(
     IWalletRepository walletRepository,
     IPasswordHasher hasher,
     ICategoryService categoryService,
-    IRolePromotionService rolePromotionService
+    IRolePromotionService rolePromotionService,
+    AppDbContext db
 ) : IDatabaseSeeder
 {
     private readonly IDbMigrationRepository _migrationRepository = migrationRepository;
@@ -29,6 +34,7 @@ public class DatabaseSeeder(
     private readonly IPasswordHasher _hasher = hasher;
     private readonly ICategoryService _categoryService = categoryService;
     private readonly IRolePromotionService _rolePromotionService = rolePromotionService;
+    private readonly AppDbContext _db = db;
 
     private sealed record SeedAddress(
         string ZipCode,
@@ -70,6 +76,7 @@ public class DatabaseSeeder(
         try
         {
             await _categoryService.EnsureDefaultCategoriesAsync(ct);
+            await FixCategoryNamesAsync(ct);
         }
         catch
         {
@@ -122,6 +129,7 @@ public class DatabaseSeeder(
 
         await SeedDefaultUserAsync(ct);
         await SeedLedgerAsync(ct);
+        await SeedMarketsAsync(admin, ct);
     }
 
     private async Task SeedDefaultUserAsync(CancellationToken ct)
@@ -252,7 +260,7 @@ public class DatabaseSeeder(
             ),
             new SeedLedgerEntry(
                 $"seed-ledger-buy-{user.Id}",
-                LedgerEntryType.BET_BUY,
+                LedgerEntryType.MARKET_BUY,
                 -50_000,
                 "Order",
                 null,
@@ -315,6 +323,55 @@ public class DatabaseSeeder(
         if (toAdd.Count > 0)
         {
             await _walletRepository.AddLedgerEntriesAsync(toAdd, ct);
+        }
+    }
+
+    private async Task SeedMarketsAsync(ApplicationUser admin, CancellationToken ct)
+    {
+        var seeds = GetMarketSeeds();
+        if (seeds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var seed in seeds)
+        {
+            var exists = await _db.Markets.AnyAsync(m => m.Title == seed.Title, ct);
+            if (exists)
+            {
+                continue;
+            }
+
+            var yesPrice = Math.Clamp(seed.Probability / 100m, 0.01m, 0.99m);
+            var market = new Market
+            {
+                Id = Guid.NewGuid(),
+                Title = seed.Title,
+                Description = seed.Description,
+                Category = NormalizeCategory(seed.Category),
+                Tags = string.Join(",", seed.Tags),
+                ClosingDate = seed.ClosingDate,
+                ResolutionDate = seed.ResolutionDate,
+                ResolutionSource = seed.ResolutionSource,
+                YesPrice = yesPrice,
+                NoPrice = 1m - yesPrice,
+                Featured = seed.Featured,
+                Status = "open",
+                CreatedBy = admin.Id,
+                CreatorEmail = admin.Email,
+                VolumeTotal = 0m,
+                Volume24h = 0m,
+                Volatility24h = 0m,
+                YesContracts = 0,
+                NoContracts = 0,
+                LowLiquidityWarning = false,
+                ProbabilityBucket = seed.Probability.ToString(CultureInfo.InvariantCulture),
+                SearchSnippet = seed.Title,
+            };
+
+            _db.Markets.Add(market);
+            await _db.SaveChangesAsync(ct);
+            await _categoryService.AssociateCategoryWithMarketAsync(market, ct);
         }
     }
 
@@ -566,6 +623,373 @@ public class DatabaseSeeder(
         Guid? ReferenceId,
         DateTimeOffset CreatedAt
     );
+
+    private sealed record SeedMarket(
+        string Title,
+        string Description,
+        string Category,
+        IReadOnlyList<string> Tags,
+        decimal Probability,
+        DateTimeOffset ClosingDate,
+        DateTimeOffset ResolutionDate,
+        string ResolutionSource,
+        bool Featured
+    );
+
+    private static List<SeedMarket> GetMarketSeeds()
+    {
+        return new List<SeedMarket>
+        {
+            new(
+                "Selic ficara acima de 10% em 2026?",
+                "Resolve SIM se a taxa Selic (meta) vigente na data de resolucao estiver > 10,00%, conforme decisao do Copom.",
+                "ECONOMIA",
+                new[] { "selic", "copom", "juros" },
+                52,
+                DateTimeOffset.Parse("2026-02-01T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-02-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                "Banco Central do Brasil (Copom)",
+                true
+            ),
+            new(
+                "IPCA 12 meses ficara abaixo de 4,5% em mar/2026?",
+                "Resolve SIM se o IPCA acumulado em 12 meses divulgado pelo IBGE para mar/2026 for < 4,5%.",
+                "ECONOMIA",
+                new[] { "ipca", "inflacao", "ibge" },
+                46,
+                DateTimeOffset.Parse("2026-04-05T18:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-04-10T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "IBGE (IPCA)",
+                false
+            ),
+            new(
+                "Congresso aprovara uma reforma tributaria complementar ate 30/06/2026?",
+                "Resolve SIM se o projeto/PLP definido no enunciado for aprovado ate 30/06/2026 (ver tramitacao oficial).",
+                "POLITICA",
+                new[] { "congresso", "reforma-tributaria", "camara", "senado" },
+                38,
+                DateTimeOffset.Parse("2026-06-25T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-07-01T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Camara dos Deputados e Senado Federal (tramitacao oficial)",
+                false
+            ),
+            new(
+                "Um novo ministerio sera criado ou fundido ate 31/12/2026?",
+                "Resolve SIM se houver criacao, fusao ou extincao de ministerio publicada em ato oficial ate 31/12/2026.",
+                "POLITICA",
+                new[] { "governo", "ministerios", "decreto" },
+                22,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Diario Oficial da Uniao (atos do Poder Executivo)",
+                true
+            ),
+            new(
+                "Brasil vencera ao menos 1 medalha de ouro no Mundial (modalidade escolhida) em 2026?",
+                "Resolve SIM se o Brasil conquistar ao menos 1 ouro no Mundial especificado no enunciado, conforme resultados oficiais.",
+                "ESPORTES",
+                new[] { "mundial", "medalhas", "brasil" },
+                28,
+                DateTimeOffset.Parse("2026-08-01T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-09-01T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Federacao/organizacao oficial do evento (resultados)",
+                false
+            ),
+            new(
+                "Flamengo terminara o Brasileirao 2026 no G4?",
+                "Resolve SIM se o Flamengo terminar o Brasileirao 2026 entre os 4 primeiros colocados na classificacao final.",
+                "ESPORTES",
+                new[] { "brasileirao", "g4", "flamengo" },
+                35,
+                DateTimeOffset.Parse("2026-11-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-12-10T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "CBF (classificacao oficial do Brasileirao)",
+                true
+            ),
+            new(
+                "Um filme brasileiro sera indicado ao Oscar (categoria principal) em 2027?",
+                "Resolve SIM se um filme brasileiro for indicado em Melhor Filme ou Melhor Filme Internacional na lista oficial de indicados.",
+                "CULTURA",
+                new[] { "oscar", "cinema", "brasil" },
+                14,
+                DateTimeOffset.Parse("2027-01-15T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-02-01T18:00:00.000Z", CultureInfo.InvariantCulture),
+                "Academy Awards (lista oficial de indicados)",
+                false
+            ),
+            new(
+                "Uma turne internacional grande anunciara datas no Brasil ate 31/12/2026?",
+                "Resolve SIM se uma turne internacional considerada 'grande' (definida no enunciado) anunciar oficialmente datas no Brasil ate 31/12/2026.",
+                "CULTURA",
+                new[] { "shows", "turne", "brasil" },
+                50,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Comunicado oficial do artista/produtora + imprensa confiavel",
+                true
+            ),
+            new(
+                "Bitcoin ficara acima de US$ 100.000 em 31/12/2026?",
+                "Resolve SIM se o preco BTC/USD estiver >= 100.000 na data de resolucao, conforme fonte definida.",
+                "CRIPTOMOEDAS",
+                new[] { "btc", "bitcoin", "cripto" },
+                33,
+                DateTimeOffset.Parse("2026-12-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-02T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "CoinMarketCap (BTC/USD spot)",
+                true
+            ),
+            new(
+                "Ethereum ficara acima de US$ 6.000 em 31/12/2026?",
+                "Resolve SIM se o preco ETH/USD estiver >= 6.000 na data de resolucao, conforme fonte definida.",
+                "CRIPTOMOEDAS",
+                new[] { "eth", "ethereum", "cripto" },
+                27,
+                DateTimeOffset.Parse("2026-12-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-02T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "CoinMarketCap (ETH/USD spot)",
+                false
+            ),
+            new(
+                "Uma onda de calor severa sera confirmada no Brasil ate 31/03/2026?",
+                "Resolve SIM se um orgao oficial confirmar ocorrencia de onda de calor severa no Brasil ate 31/03/2026 (definicao oficial).",
+                "CLIMA",
+                new[] { "onda-de-calor", "clima", "brasil" },
+                58,
+                DateTimeOffset.Parse("2026-03-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-04-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "INMET / orgaos meteorologicos oficiais",
+                true
+            ),
+            new(
+                "El Nino sera declarado ativo por agencia internacional em 2026?",
+                "Resolve SIM se a agencia definida declarar oficialmente condicoes de El Nino em algum momento de 2026.",
+                "CLIMA",
+                new[] { "el-nino", "noaa", "clima" },
+                35,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-20T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "NOAA/CPC ou agencia internacional equivalente",
+                false
+            ),
+            new(
+                "Ibovespa fechara acima de 150.000 pontos em 30/06/2026?",
+                "Resolve SIM se o valor de fechamento do Ibovespa na data de resolucao for > 150.000 pontos.",
+                "FINANCAS",
+                new[] { "ibovespa", "bolsa", "b3" },
+                29,
+                DateTimeOffset.Parse("2026-06-25T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-06-30T20:30:00.000Z", CultureInfo.InvariantCulture),
+                "B3 (cotacao oficial do Ibovespa)",
+                true
+            ),
+            new(
+                "Dolar (PTAX) ficara abaixo de R$ 5,50 em 30/06/2026?",
+                "Resolve SIM se a PTAX de fechamento na data de resolucao for < 5,50.",
+                "FINANCAS",
+                new[] { "dolar", "ptax", "cambio" },
+                34,
+                DateTimeOffset.Parse("2026-06-25T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-06-30T14:00:00.000Z", CultureInfo.InvariantCulture),
+                "Banco Central do Brasil (PTAX)",
+                false
+            ),
+            new(
+                "Uma Big Tech anunciara investimento bilionario (R$) no Brasil ate 31/12/2026?",
+                "Resolve SIM se uma Big Tech (definida no enunciado) anunciar publicamente investimento >= R$ 1 bilhao no Brasil ate 31/12/2026.",
+                "EMPRESAS",
+                new[] { "big-tech", "investimento", "brasil" },
+                40,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Comunicado oficial da empresa + imprensa confiavel",
+                true
+            ),
+            new(
+                "Uma empresa brasileira fara IPO na B3 ate 31/12/2026?",
+                "Resolve SIM se ocorrer ao menos 1 IPO de empresa brasileira na B3 ate 31/12/2026.",
+                "EMPRESAS",
+                new[] { "ipo", "b3", "mercado" },
+                32,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-10T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "B3 (comunicados e registros de listagem)",
+                false
+            ),
+            new(
+                "Brasil aprovara uma nova lei relevante de IA ate 31/12/2026?",
+                "Resolve SIM se uma lei federal sobre IA (definida no enunciado) for sancionada ate 31/12/2026.",
+                "TECNOLOGIA-E-CIENCIA",
+                new[] { "ia", "lei", "congresso" },
+                44,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-10T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Planalto + Diario Oficial + tramitacao oficial",
+                true
+            ),
+            new(
+                "PIX ganhara nova funcionalidade oficial ate 31/05/2026?",
+                "Resolve SIM se o Banco Central anunciar e lancar publicamente nova funcionalidade do PIX ate 31/05/2026.",
+                "TECNOLOGIA-E-CIENCIA",
+                new[] { "pix", "bacen", "fintech" },
+                60,
+                DateTimeOffset.Parse("2026-05-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-06-01T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Banco Central do Brasil (comunicados oficiais)",
+                false
+            ),
+            new(
+                "Anvisa aprovara uma nova vacina de uso amplo ate 30/09/2026?",
+                "Resolve SIM se a Anvisa publicar aprovacao de registro para vacina com indicacao de uso amplo ate 30/09/2026.",
+                "SAUDE",
+                new[] { "anvisa", "vacina", "registro" },
+                27,
+                DateTimeOffset.Parse("2026-09-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-10-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Anvisa (consultas e publicacoes oficiais)",
+                false
+            ),
+            new(
+                "SUS anunciara expansao nacional de um programa de saude ate 31/12/2026?",
+                "Resolve SIM se o Ministerio da Saude anunciar e publicar expansao nacional de programa definido no enunciado ate 31/12/2026.",
+                "SAUDE",
+                new[] { "sus", "ministerio-da-saude", "programa" },
+                45,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-01-10T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Ministerio da Saude (atos e comunicados oficiais)",
+                true
+            ),
+            new(
+                "Um conflito internacional relevante tera cessar-fogo formal ate 30/06/2026?",
+                "Resolve SIM se houver anuncio formal de cessar-fogo em conflito definido no enunciado ate 30/06/2026.",
+                "MUNDO",
+                new[] { "geopolitica", "cessar-fogo", "mundo" },
+                36,
+                DateTimeOffset.Parse("2026-06-20T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2026-07-05T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "ONU + comunicados oficiais das partes",
+                false
+            ),
+            new(
+                "Um pais do G20 entrara oficialmente em recessao tecnica em 2026?",
+                "Resolve SIM se um pais do G20 registrar dois trimestres seguidos de queda do PIB (conforme estatistica oficial) em 2026.",
+                "MUNDO",
+                new[] { "g20", "recessao", "pib" },
+                42,
+                DateTimeOffset.Parse("2026-12-10T20:00:00.000Z", CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse("2027-02-01T12:00:00.000Z", CultureInfo.InvariantCulture),
+                "Institutos oficiais de estatistica/BCs dos paises (dados de PIB)",
+                false
+            ),
+        };
+    }
+
+    private async Task FixCategoryNamesAsync(CancellationToken ct)
+    {
+        var canonical = new[]
+        {
+            "EM-ALTA",
+            "NOVIDADES",
+            "TODAS",
+            "POLITICA",
+            "ESPORTES",
+            "CULTURA",
+            "CRIPTOMOEDAS",
+            "CLIMA",
+            "ECONOMIA",
+            "MENCOES",
+            "EMPRESAS",
+            "FINANCAS",
+            "TECNOLOGIA-E-CIENCIA",
+            "SAUDE",
+            "MUNDO",
+        };
+
+        var map = canonical.ToDictionary(
+            name => RemoveDiacritics(name).Trim().ToUpperInvariant(),
+            name => name
+        );
+
+        var categories = await _db.Categories.ToListAsync(ct);
+        if (categories.Count == 0)
+        {
+            return;
+        }
+
+        var changed = false;
+        foreach (var category in categories)
+        {
+            var key = RemoveDiacritics(category.Name ?? string.Empty).Trim().ToUpperInvariant();
+            if (!map.TryGetValue(key, out var canonicalName))
+            {
+                continue;
+            }
+
+            if (!string.Equals(category.Name, canonicalName, StringComparison.Ordinal))
+            {
+                category.Name = canonicalName;
+                category.Slug = SlugifyCategory(canonicalName);
+                changed = true;
+            }
+        }
+
+        // Remove duplicates after normalization (keep lowest Id)
+        var duplicates = categories
+            .GroupBy(c => (c.Name ?? string.Empty).Trim().ToUpperInvariant())
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        foreach (var group in duplicates)
+        {
+            var keep = group.OrderBy(c => c.Id).First();
+            var remove = group.Where(c => c.Id != keep.Id).ToList();
+            if (remove.Count > 0)
+            {
+                var removeIds = remove.Select(c => c.Id).ToList();
+                var links = await _db
+                    .MarketCategories.Where(mc => removeIds.Contains(mc.CategoryId))
+                    .ToListAsync(ct);
+                foreach (var link in links)
+                {
+                    link.CategoryId = keep.Id;
+                }
+                _db.Categories.RemoveRange(remove);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    private static string NormalizeCategory(string category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return "ECONOMIA";
+        }
+
+        var normalized = RemoveDiacritics(category).Trim().ToUpperInvariant();
+        normalized = Regex.Replace(normalized, "\\s+", " ");
+
+        return normalized;
+    }
+
+    private static string SlugifyCategory(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return string.Empty;
+        }
+
+        var normalized = RemoveDiacritics(input).Trim();
+        var collapsed = Regex.Replace(normalized, "\\s+", "-");
+        var cleaned = Regex.Replace(collapsed, "[^A-Za-z0-9\\-]", string.Empty);
+        return cleaned.ToUpperInvariant();
+    }
 
     private static string RemoveDiacritics(string value)
     {

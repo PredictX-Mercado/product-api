@@ -43,7 +43,7 @@ public class QueuedEmailSender : IEmailSender, Product.Business.Interfaces.Auth.
         var model = new ConfirmationEmailModel { UserName = userName, ConfirmUrl = confirmUrl };
         var html = await _renderer.RenderAsync("ConfirmationEmail", model, ct);
         await _queue.EnqueueAsync(
-            new EmailMessage(toEmail, userName, $"{_options.FromName} - confirm your email", html),
+            new EmailMessage(toEmail, userName, "Confirme seu e-mail", html),
             ct
         );
     }
@@ -61,7 +61,7 @@ public class QueuedEmailSender : IEmailSender, Product.Business.Interfaces.Auth.
             new EmailMessage(
                 toEmail,
                 userName,
-                $"{_options.FromName} - confirm your email change",
+                "Confirme a alteração de e-mail",
                 html
             ),
             ct
@@ -78,7 +78,7 @@ public class QueuedEmailSender : IEmailSender, Product.Business.Interfaces.Auth.
         var model = new ForgotPasswordEmailModel { UserName = userName, ResetCode = resetCode };
         var html = await _renderer.RenderAsync("ForgotPassword", model, ct);
         await _queue.EnqueueAsync(
-            new EmailMessage(toEmail, userName, $"{_options.FromName} - password reset code", html),
+            new EmailMessage(toEmail, userName, "Código para redefinir sua senha", html),
             ct
         );
     }
@@ -92,7 +92,7 @@ public class QueuedEmailSender : IEmailSender, Product.Business.Interfaces.Auth.
         var model = new ResetPasswordConfirmationModel { UserName = userName };
         var html = await _renderer.RenderAsync("ConfirmResetPassword", model, ct);
         await _queue.EnqueueAsync(
-            new EmailMessage(toEmail, userName, $"{_options.FromName} - password updated", html),
+            new EmailMessage(toEmail, userName, "Sua senha foi atualizada", html),
             ct
         );
     }

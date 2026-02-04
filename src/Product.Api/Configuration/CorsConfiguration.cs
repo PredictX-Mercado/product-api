@@ -12,6 +12,7 @@ public static class CorsConfiguration
             "http://localhost:3000",
             "http://localhost:5280",
             "https://genuine-husky-secondly.ngrok-free.app",
+            "https://cladocarpous-cryptogrammatical-yasmin.ngrok-free.dev",
             "https://product-web-ochre-gamma.vercel.app",
             "https://product-api-bwcv.onrender.com",
         };

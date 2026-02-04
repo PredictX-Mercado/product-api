@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Product.Api.Extensions;
 using Product.Business.Interfaces.Auth;
+using Product.Business.Options;
 using Product.Contracts.Auth;
 
 namespace Product.Api.Controllers;
@@ -11,8 +13,13 @@ namespace Product.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IOptions<FrontendOptions> _frontendOptions;
 
-    public AuthController(IAuthService authService) => _authService = authService;
+    public AuthController(IAuthService authService, IOptions<FrontendOptions> frontendOptions)
+    {
+        _authService = authService;
+        _frontendOptions = frontendOptions;
+    }
 
     [HttpPost("sign-up")]
     [AllowAnonymous]
@@ -55,14 +62,22 @@ public class AuthController : ControllerBase
 
     [HttpPost("confirmEmail")]
     [AllowAnonymous]
-    public async Task<IActionResult> ConfirmEmail(
-        [FromQuery] Guid userId,
-        [FromQuery] string code,
-        [FromQuery] string? newEmail
+    public async Task<IActionResult> ConfirmEmail([FromQuery] string? shortCode)
+    {
+        var result = await _authService.ConfirmEmailApiAsync(shortCode);
+        return this.ToActionResult(result);
+    }
+
+    // Server-side friendly URL: consumes shortCode and redirects to a clean front route.
+    [HttpGet("~/confirm-email/{shortCode}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmEmailShort(
+        [FromRoute] string shortCode,
+        [FromQuery] string? redirect
     )
     {
-        var result = await _authService.ConfirmEmailApiAsync(userId, code, newEmail);
-        return this.ToActionResult(result);
+        var destination = await _authService.GetConfirmEmailRedirectAsync(shortCode, redirect);
+        return Redirect(destination);
     }
 
     [HttpPost("resendConfirmationEmail")]

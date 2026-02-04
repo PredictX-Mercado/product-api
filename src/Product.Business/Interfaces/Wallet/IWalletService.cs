@@ -127,16 +127,4 @@ public interface IWalletService
         CancellationToken ct = default
     );
 
-    Task<ApiResult> GetReceiptsApiAsync(
-        ClaimsPrincipal principal,
-        string? cursor,
-        int? limit,
-        CancellationToken ct = default
-    );
-
-    Task<ApiResult> GetReceiptApiAsync(
-        ClaimsPrincipal principal,
-        Guid receiptId,
-        CancellationToken ct = default
-    );
 }

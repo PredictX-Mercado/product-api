@@ -40,21 +40,21 @@ public partial class CategoryService(AppDbContext db) : ICategoryService
     {
         var defaults = new[]
         {
-            "Em Alta",
-            "Novidades",
-            "Todas",
-            "Política",
-            "Esportes",
-            "Cultura",
-            "Criptomoedas",
-            "Clima",
-            "Economia",
-            "Menções",
-            "Empresas",
-            "Finanças",
-            "Tecnologia e Ciência",
-            "Saúde",
-            "Mundo",
+            "EM-ALTA",
+            "NOVIDADES",
+            "TODAS",
+            "POLITICA",
+            "ESPORTES",
+            "CULTURA",
+            "CRIPTOMOEDAS",
+            "CLIMA",
+            "ECONOMIA",
+            "MENCOES",
+            "EMPRESAS",
+            "FINANCAS",
+            "TECNOLOGIA-E-CIENCIA",
+            "SAUDE",
+            "MUNDO",
         };
         foreach (var name in defaults)
         {
@@ -105,7 +105,7 @@ public partial class CategoryService(AppDbContext db) : ICategoryService
         }
 
         // Always associate with 'todas'
-        var todas = await GetOrCreate("Todas");
+        var todas = await GetOrCreate("TODAS");
         _db.MarketCategories.Add(
             new MarketCategory
             {
@@ -131,7 +131,7 @@ public partial class CategoryService(AppDbContext db) : ICategoryService
         }
 
         // Novidades: new markets (created within last 7 days)
-        var novidades = await GetOrCreate("novidades");
+        var novidades = await GetOrCreate("NOVIDADES");
         if (market.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-7))
         {
             _db.MarketCategories.Add(
@@ -145,7 +145,7 @@ public partial class CategoryService(AppDbContext db) : ICategoryService
         }
 
         // Em alta: simple heuristic using recent volume or contracts
-        var emAlta = await GetOrCreate("em alta");
+        var emAlta = await GetOrCreate("EM-ALTA");
         if (
             market.Volume24h > 0
             || market.VolumeTotal > 1000

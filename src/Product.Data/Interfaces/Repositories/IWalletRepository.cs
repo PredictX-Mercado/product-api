@@ -31,6 +31,10 @@ public interface IWalletRepository
         int take,
         CancellationToken ct = default
     );
+    Task<List<PaymentIntent>> GetPaymentIntentsByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken ct = default
+    );
     Task<Withdrawal?> GetWithdrawalByIdAsync(Guid withdrawalId, CancellationToken ct = default);
     Task<Withdrawal?> GetWithdrawalByIdempotencyAsync(
         Guid userId,
@@ -77,6 +81,26 @@ public interface IWalletRepository
         CancellationToken ct = default
     );
     Task<Receipt?> GetReceiptByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<Product.Data.Models.Markets.Market>> GetMarketsByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken ct = default
+    );
+    Task<List<PaymentIntent>> GetApprovedPaymentIntentsWithoutReceiptAsync(
+        int take,
+        CancellationToken ct = default
+    );
+    Task<bool> ReceiptExistsForReferenceAsync(Guid referenceId, CancellationToken ct = default);
+    Task<List<Product.Data.Models.Markets.Transaction>> GetBuyTransactionsWithoutReceiptAsync(
+        int take,
+        CancellationToken ct = default
+    );
+    Task<LedgerEntry?> FindLedgerEntryForBuyAsync(
+        Guid userId,
+        Guid marketId,
+        decimal amount,
+        DateTimeOffset txCreatedAt,
+        CancellationToken ct = default
+    );
     Task AddUserAsync(ApplicationUser user, CancellationToken ct = default);
     Task<bool> UserExistsAsync(Guid userId, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);

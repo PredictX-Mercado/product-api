@@ -1,8 +1,12 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Product.Business.Interfaces.Payments;
 using Product.Business.Interfaces.Results;
 using Product.Business.Interfaces.Wallet;
 using Product.Common.Enums;
+using Product.Contracts.Users.PaymentsMethods;
+using Product.Contracts.Users.PaymentsMethods.Pix;
 using Product.Contracts.Wallet;
 using Product.Data.Interfaces.Repositories;
 using Product.Data.Models.Wallet;
@@ -16,10 +20,18 @@ public class WalletService : IWalletService
     private const int MaxLimit = 200;
 
     private readonly IWalletRepository _walletRepository;
+    private readonly IMercadoPagoService _mercadoPagoService;
+    private readonly IUserRepository _userRepository;
 
-    public WalletService(IWalletRepository walletRepository)
+    public WalletService(
+        IWalletRepository walletRepository,
+        IMercadoPagoService mercadoPagoService,
+        IUserRepository userRepository
+    )
     {
         _walletRepository = walletRepository;
+        _mercadoPagoService = mercadoPagoService;
+        _userRepository = userRepository;
     }
 
     public async Task<ApiResult> GetBalancesApiAsync(
@@ -229,6 +241,8 @@ public class WalletService : IWalletService
         CancellationToken ct = default
     )
     {
+        decimal Round2(decimal v) => Math.Round(v, 2, MidpointRounding.AwayFromZero);
+
         var intent = await _walletRepository.GetPaymentIntentByIdAsync(paymentIntentId, ct);
         if (intent is null)
             return ServiceResult<bool>.Fail("payment_intent_not_found");
@@ -246,7 +260,7 @@ public class WalletService : IWalletService
         {
             AccountId = account.Id,
             Type = LedgerEntryType.DEPOSIT_GATEWAY,
-            Amount = intent.Amount,
+            Amount = Round2(intent.Amount),
             ReferenceType = "PaymentIntent",
             ReferenceId = intent.Id,
             IdempotencyKey = providerPaymentId ?? intent.IdempotencyKey,
@@ -257,29 +271,27 @@ public class WalletService : IWalletService
 
         await _walletRepository.AddLedgerEntryAsync(entry, ct);
 
-        try
+        var receipt = new Receipt
         {
-            var receipt = new Product.Data.Models.Wallet.Receipt
-            {
-                Id = Guid.NewGuid(),
-                UserId = intent.UserId,
-                Type = "deposit",
-                Amount = entry.Amount,
-                Currency = intent.Currency,
-                Provider = intent.Provider,
-                ProviderPaymentIdText = intent.ExternalPaymentId,
-                ReferenceType = "PaymentIntent",
-                ReferenceId = intent.Id,
-                PayloadJson = System.Text.Json.JsonSerializer.Serialize(
-                    new { intent = intent, ledgerEntry = entry }
-                ),
-            };
-            await _walletRepository.AddReceiptAsync(receipt, ct);
-        }
-        catch
-        {
-            // swallow to avoid failing the deposit confirmation on receipt persistence issues
-        }
+            Id = Guid.NewGuid(),
+            UserId = intent.UserId,
+            Type = "deposit",
+            Amount = entry.Amount,
+            Currency = intent.Currency,
+            Provider = intent.Provider,
+            PaymentIntentId = intent.Id,
+            PaymentMethod = intent.PaymentMethod,
+            PaymentExpiresAt = intent.ExpiresAt,
+            CheckoutUrl = intent.CheckoutUrl,
+            ExternalPaymentId = intent.ExternalPaymentId,
+            Description = $"Depósito via {intent.Provider}",
+            ProviderPaymentIdText = intent.ExternalPaymentId,
+            ProviderPaymentId = long.TryParse(intent.ExternalPaymentId, out var pid2) ? pid2 : null,
+            ReferenceType = "LedgerEntry",
+            ReferenceId = entry.Id,
+            PayloadJson = JsonSerializer.Serialize(new { intent, ledgerEntry = entry }),
+        };
+        await _walletRepository.AddReceiptAsync(receipt, ct);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -299,22 +311,25 @@ public class WalletService : IWalletService
             return ServiceResult<bool>.Fail("payment_intent_not_found");
         }
 
+        decimal Round2(decimal v) => Math.Round(v, 2, MidpointRounding.AwayFromZero);
         var amountAdjusted = false;
         if (providerAmount is > 0)
         {
             if (intent.Status != PaymentIntentStatus.APPROVED)
             {
-                if (intent.Amount != providerAmount.Value)
+                var rounded = Round2(providerAmount.Value);
+                if (intent.Amount != rounded)
                 {
-                    intent.Amount = providerAmount.Value;
+                    intent.Amount = rounded;
                     amountAdjusted = true;
                 }
             }
             else
             {
-                if (intent.Amount != providerAmount.Value)
+                var rounded = Round2(providerAmount.Value);
+                if (intent.Amount != rounded)
                 {
-                    intent.Amount = providerAmount.Value;
+                    intent.Amount = rounded;
                     amountAdjusted = true;
                 }
 
@@ -323,9 +338,9 @@ public class WalletService : IWalletService
                     intent.Id,
                     ct
                 );
-                if (ledger is not null && ledger.Amount != providerAmount.Value)
+                if (ledger is not null && ledger.Amount != rounded)
                 {
-                    ledger.Amount = providerAmount.Value;
+                    ledger.Amount = rounded;
                     amountAdjusted = true;
                 }
             }
@@ -468,6 +483,12 @@ public class WalletService : IWalletService
         CancellationToken ct = default
     )
     {
+        var amount = Math.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        if (amount <= 0)
+        {
+            return ServiceResult<CreateDepositResponse>.Fail("invalid_amount");
+        }
+
         var accounts = await EnsureAccountsAsync(userId, ct);
         var account = accounts[0];
 
@@ -484,8 +505,9 @@ public class WalletService : IWalletService
         var intent = new PaymentIntent
         {
             UserId = userId,
-            Provider = "MANUAL",
-            Amount = request.Amount,
+            Provider = "MERCADOPAGO",
+            PaymentMethod = "pix",
+            Amount = amount,
             Currency = account.Currency,
             Status = PaymentIntentStatus.PENDING,
             IdempotencyKey = idempotencyKey,
@@ -493,6 +515,51 @@ public class WalletService : IWalletService
         };
 
         await _walletRepository.AddPaymentIntentAsync(intent, ct);
+
+        intent.ExternalReference = $"WALLET_DEPOSIT_{intent.Id}";
+        await _walletRepository.UpdatePaymentIntentAsync(intent, ct);
+
+        // Prepare PIX order on Mercado Pago
+        var user = await _userRepository.GetUserByIdAsync(userId, ct);
+        var email = user?.Email ?? "user@unknown.local";
+        var payerId = user?.PersonalData?.Cpf;
+
+        var pixReq = new CreatePixRequest
+        {
+            OrderId = intent.ExternalReference,
+            Amount = amount,
+            Description = "Wallet deposit",
+            BuyerEmail = email,
+            Payer = new PixPayer
+            {
+                Email = email,
+                Identification = string.IsNullOrWhiteSpace(payerId)
+                    ? null
+                    : new Identification
+                    {
+                        Type = payerId!.Length > 11 ? "CNPJ" : "CPF",
+                        Number = payerId,
+                    },
+            },
+            ExpirationMinutes = 15,
+        };
+
+        var pixResult = await _mercadoPagoService.CreatePixAsync(pixReq, null, ct);
+        if (pixResult.StatusCode >= StatusCodes.Status400BadRequest || pixResult.Data is null)
+        {
+            return ServiceResult<CreateDepositResponse>.Fail(
+                pixResult.Error ?? "gateway_unavailable"
+            );
+        }
+
+        if (pixResult.Data is PixResponse pix)
+        {
+            intent.ExternalPaymentId = pix.PaymentId.ToString();
+            intent.PixQrCode = pix.QrCode;
+            intent.PixQrCodeBase64 = pix.QrCodeBase64;
+            intent.ExpiresAt = pix.ExpiresAt ?? intent.ExpiresAt;
+            await _walletRepository.UpdatePaymentIntentAsync(intent, ct);
+        }
 
         return ServiceResult<CreateDepositResponse>.Ok(MapDeposit(intent));
     }
@@ -589,24 +656,19 @@ public class WalletService : IWalletService
         );
 
         // Persist immutable receipt for withdrawal request
-        try
+        var receipt = new Receipt
         {
-            var receipt = new Product.Data.Models.Wallet.Receipt
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                Type = "withdraw_request",
-                Amount = -request.Amount,
-                Currency = account.Currency,
-                ReferenceType = "Withdrawal",
-                ReferenceId = withdrawal.Id,
-                PayloadJson = System.Text.Json.JsonSerializer.Serialize(
-                    new { withdrawal = withdrawal }
-                ),
-            };
-            await _walletRepository.AddReceiptAsync(receipt, ct);
-        }
-        catch { }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Type = "withdraw_request",
+            Amount = -request.Amount,
+            Currency = account.Currency,
+            Description = "Solicitação de saque",
+            ReferenceType = "Withdrawal",
+            ReferenceId = withdrawal.Id,
+            PayloadJson = JsonSerializer.Serialize(new { withdrawal = withdrawal }),
+        };
+        await _walletRepository.AddReceiptAsync(receipt, ct);
 
         return ServiceResult<WithdrawalResponse>.Ok(MapWithdrawal(withdrawal));
     }
@@ -780,6 +842,11 @@ public class WalletService : IWalletService
             Currency = intent.Currency,
             CreatedAt = intent.CreatedAt,
             ExpiresAt = intent.ExpiresAt,
+            ProviderPaymentId = long.TryParse(intent.ExternalPaymentId, out var pid) ? pid : null,
+            ExternalReference = intent.ExternalReference,
+            PixQrCode = intent.PixQrCode,
+            PixQrCodeBase64 = intent.PixQrCodeBase64,
+            CheckoutUrl = intent.CheckoutUrl,
         };
 
     private static WithdrawalResponse MapWithdrawal(Withdrawal withdrawal) =>
@@ -801,153 +868,6 @@ public class WalletService : IWalletService
             Currency = withdrawal.Currency,
             RequestedAt = withdrawal.CreatedAt,
         };
-
-    // Receipts (dynamic - built from ledger entries + payment intents)
-    public async Task<ApiResult> GetReceiptsApiAsync(
-        ClaimsPrincipal principal,
-        string? cursor,
-        int? limit,
-        CancellationToken ct = default
-    )
-    {
-        if (!TryGetUserId(principal, out var userId))
-        {
-            return ApiResult.Problem(StatusCodes.Status401Unauthorized, "invalid_token");
-        }
-
-        var result = await GetReceiptsAsync(userId, cursor, limit, ct);
-        if (!result.Success)
-        {
-            var status =
-                result.Error == "invalid_cursor"
-                    ? StatusCodes.Status400BadRequest
-                    : StatusCodes.Status404NotFound;
-            return ApiResult.Problem(status, result.Error ?? "unknown");
-        }
-
-        return ApiResult.Ok(result.Data, envelope: true);
-    }
-
-    public async Task<ApiResult> GetReceiptApiAsync(
-        ClaimsPrincipal principal,
-        Guid receiptId,
-        CancellationToken ct = default
-    )
-    {
-        if (!TryGetUserId(principal, out var userId))
-        {
-            return ApiResult.Problem(StatusCodes.Status401Unauthorized, "invalid_token");
-        }
-
-        var result = await GetReceiptAsync(userId, receiptId, ct);
-        if (!result.Success)
-        {
-            return ApiResult.Problem(StatusCodes.Status404NotFound, result.Error ?? "not_found");
-        }
-
-        return ApiResult.Ok(result.Data, envelope: true);
-    }
-
-    public async Task<ServiceResult<ReceiptListResponse>> GetReceiptsAsync(
-        Guid userId,
-        string? cursor,
-        int? limit,
-        CancellationToken ct = default
-    )
-    {
-        var pageSize = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-        if (!TryParseCursor(cursor, out var cursorTime))
-        {
-            return ServiceResult<ReceiptListResponse>.Fail("invalid_cursor");
-        }
-
-        var accounts = await EnsureAccountsAsync(userId, ct);
-        var accountIds = accounts.Select(a => a.Id).ToArray();
-
-        var entries = await _walletRepository.GetLedgerEntriesAsync(
-            accountIds,
-            cursorTime,
-            pageSize + 1,
-            ct
-        );
-
-        var hasMore = entries.Count > pageSize;
-        var page = entries.Take(pageSize).ToList();
-        var nextCursor = hasMore && page.Count > 0 ? page.Last().CreatedAt.ToString("o") : null;
-
-        var items = new List<ReceiptItem>();
-
-        foreach (var e in page)
-        {
-            string? provider = null;
-            long? providerPaymentId = null;
-            string? providerPaymentIdText = null;
-
-            if (e.ReferenceType == "PaymentIntent" && e.ReferenceId.HasValue)
-            {
-                var intent = await _walletRepository.GetPaymentIntentByIdAsync(
-                    e.ReferenceId.Value,
-                    ct
-                );
-                if (intent is not null)
-                {
-                    provider = intent.Provider;
-                    providerPaymentIdText = intent.ExternalPaymentId;
-                }
-            }
-
-            items.Add(
-                new ReceiptItem
-                {
-                    Id = e.Id,
-                    Type = e.Type.ToString(),
-                    Amount = e.Amount,
-                    Currency = accounts.FirstOrDefault(a => a.Id == e.AccountId)?.Currency ?? "BRL",
-                    ReferenceType = e.ReferenceType,
-                    ReferenceId = e.ReferenceId,
-                    Provider = provider,
-                    ProviderPaymentId = providerPaymentId,
-                    ProviderPaymentIdText = providerPaymentIdText,
-                    CreatedAt = e.CreatedAt,
-                    MetaJson = e.MetaJson,
-                }
-            );
-        }
-
-        return ServiceResult<ReceiptListResponse>.Ok(
-            new ReceiptListResponse { Items = items, NextCursor = nextCursor }
-        );
-    }
-
-    public async Task<ServiceResult<ReceiptItem>> GetReceiptAsync(
-        Guid userId,
-        Guid receiptId,
-        CancellationToken ct = default
-    )
-    {
-        var r = await _walletRepository.GetReceiptByIdAsync(receiptId, ct);
-        if (r is null)
-            return ServiceResult<ReceiptItem>.Fail("not_found");
-        if (r.UserId != userId)
-            return ServiceResult<ReceiptItem>.Fail("not_found");
-
-        var item = new ReceiptItem
-        {
-            Id = r.Id,
-            Type = r.Type,
-            Amount = r.Amount,
-            Currency = r.Currency,
-            ReferenceType = r.ReferenceType,
-            ReferenceId = r.ReferenceId,
-            Provider = r.Provider,
-            ProviderPaymentId = r.ProviderPaymentId,
-            ProviderPaymentIdText = r.ProviderPaymentIdText,
-            CreatedAt = r.CreatedAt,
-            MetaJson = r.PayloadJson,
-        };
-
-        return ServiceResult<ReceiptItem>.Ok(item);
-    }
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId)
     {

@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Product.Business.Interfaces.Payments;
@@ -24,7 +26,7 @@ public class MercadoPagoService : IMercadoPagoService
     private readonly MercadoPagoOptions _options;
     private readonly IOrderService _orderService;
     private readonly IWebhookService _webhookService;
-    private readonly IWalletService _walletService;
+    private readonly Lazy<IWalletService> _walletService;
     private readonly ILogger<MercadoPagoService> _logger;
 
     public MercadoPagoService(
@@ -32,7 +34,7 @@ public class MercadoPagoService : IMercadoPagoService
         IOptions<MercadoPagoOptions> options,
         IOrderService orderService,
         IWebhookService webhookService,
-        IWalletService walletService,
+        IServiceProvider serviceProvider,
         ILogger<MercadoPagoService> logger
     )
     {
@@ -40,7 +42,9 @@ public class MercadoPagoService : IMercadoPagoService
         _options = options.Value;
         _orderService = orderService;
         _webhookService = webhookService;
-        _walletService = walletService;
+        _walletService = new Lazy<IWalletService>(
+            () => serviceProvider.GetRequiredService<IWalletService>()
+        );
         _logger = logger;
     }
 
@@ -210,7 +214,7 @@ public class MercadoPagoService : IMercadoPagoService
         {
             try
             {
-                await _walletService.SyncDepositStatusAsync(
+                await _walletService.Value.SyncDepositStatusAsync(
                     intentId,
                     status,
                     statusDetail,
@@ -349,7 +353,7 @@ public class MercadoPagoService : IMercadoPagoService
                 {
                     try
                     {
-                        await _walletService.SyncDepositStatusAsync(
+                        await _walletService.Value.SyncDepositStatusAsync(
                             intentId,
                             status,
                             statusDetail,
@@ -829,7 +833,7 @@ public class MercadoPagoService : IMercadoPagoService
                 {
                     try
                     {
-                        await _walletService.SyncDepositStatusAsync(
+                        await _walletService.Value.SyncDepositStatusAsync(
                             intentId,
                             status,
                             statusDetail,
@@ -1196,7 +1200,7 @@ public class MercadoPagoService : IMercadoPagoService
                                 intentId.Value,
                                 paymentId
                             );
-                            await _walletService.ConfirmDepositAsync(
+                            await _walletService.Value.ConfirmDepositAsync(
                                 intentId.Value,
                                 paymentId?.ToString() ?? string.Empty,
                                 ct
@@ -1207,6 +1211,48 @@ public class MercadoPagoService : IMercadoPagoService
                             _logger.LogError(
                                 ex,
                                 "ConfirmDepositAsync failed for intent {intent}",
+                                intentId.Value
+                            );
+                        }
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(orderId))
+                {
+                    Guid? intentId = null;
+                    if (Guid.TryParse(orderId, out var parsed))
+                        intentId = parsed;
+                    else
+                    {
+                        try
+                        {
+                            var m = Regex.Match(
+                                orderId,
+                                "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+                            );
+                            if (m.Success && Guid.TryParse(m.Value, out var inner))
+                                intentId = inner;
+                        }
+                        catch { }
+                    }
+
+                    if (intentId.HasValue)
+                    {
+                        try
+                        {
+                            await _walletService.Value.SyncDepositStatusAsync(
+                                intentId.Value,
+                                status,
+                                statusDetail,
+                                paymentId?.ToString(),
+                                amount,
+                                ct
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "SyncDepositStatusAsync failed for intent {intent}",
                                 intentId.Value
                             );
                         }
@@ -1499,7 +1545,7 @@ public class MercadoPagoService : IMercadoPagoService
                 {
                     try
                     {
-                        await _walletService.SyncDepositStatusAsync(
+                        await _walletService.Value.SyncDepositStatusAsync(
                             intentId,
                             status,
                             statusDetail,

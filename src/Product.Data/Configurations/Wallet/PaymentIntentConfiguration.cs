@@ -14,9 +14,15 @@ public class PaymentIntentConfiguration : IEntityTypeConfiguration<PaymentIntent
         builder.Property(x => x.Amount).IsRequired().HasPrecision(18, 6);
         builder.Property(x => x.IdempotencyKey).IsRequired().HasMaxLength(128);
         builder.Property(x => x.ExternalPaymentId).HasMaxLength(128);
+        builder.Property(x => x.ExternalReference).HasMaxLength(160);
+        builder.Property(x => x.PaymentMethod).IsRequired().HasMaxLength(16);
+        builder.Property(x => x.PixQrCode).HasColumnType("text");
+        builder.Property(x => x.PixQrCodeBase64).HasColumnType("text");
+        builder.Property(x => x.CheckoutUrl).HasMaxLength(512);
 
         builder.HasIndex(x => x.IdempotencyKey).IsUnique();
         builder.HasIndex(x => x.ExternalPaymentId);
+        builder.HasIndex(x => x.ExternalReference);
         builder.HasIndex(x => new { x.UserId, x.CreatedAt });
 
         builder

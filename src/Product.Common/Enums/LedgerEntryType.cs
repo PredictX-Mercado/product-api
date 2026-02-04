@@ -4,7 +4,7 @@ public enum LedgerEntryType
 {
     DEPOSIT_GATEWAY,
     WITHDRAW_REQUEST,
-    BET_BUY,
+    MARKET_BUY,
     PAYOUT,
     FEE,
 }

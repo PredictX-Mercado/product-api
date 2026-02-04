@@ -9,6 +9,7 @@ public class MPWebhookEvent : Entity<Guid>
     public long? ProviderPaymentId { get; set; }
     public string? OrderId { get; set; }
     public string Payload { get; set; } = string.Empty; // raw json
+    public string? PayloadHash { get; set; }
     public string? Headers { get; set; }
     public string? SignatureHeader { get; set; }
     public int? ResponseStatusCode { get; set; }

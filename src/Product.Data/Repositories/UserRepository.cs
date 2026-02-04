@@ -70,6 +70,18 @@ public class UserRepository(AppDbContext db) : IUserRepository
         return user;
     }
 
+    public async Task<ApplicationUser?> GetUserByIdAsync(
+        Guid userId,
+        CancellationToken ct = default
+    )
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+            return null;
+        user.Role = DeserializeRoles(user.RoleRaw);
+        return user;
+    }
+
     public async Task<bool> IsEmailTakenAsync(
         Guid userId,
         string normalizedEmail,
@@ -146,15 +158,14 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ToListAsync(ct);
     }
 
-    public async Task<(IReadOnlyCollection<ApplicationUser> Users, int Total)>
-        SearchUsersAsync(
-            string? query,
-            string? by,
-            bool startsWith,
-            int page,
-            int pageSize,
-            CancellationToken ct = default
-        )
+    public async Task<(IReadOnlyCollection<ApplicationUser> Users, int Total)> SearchUsersAsync(
+        string? query,
+        string? by,
+        bool startsWith,
+        int page,
+        int pageSize,
+        CancellationToken ct = default
+    )
     {
         var q = db.Users.AsQueryable();
 
@@ -183,19 +194,23 @@ public class UserRepository(AppDbContext db) : IUserRepository
                 }
                 else
                 {
-                    q = q.Where(u => EF.Functions.Like(u.Name!, pattern) || EF.Functions.Like(u.UserName!, pattern));
+                    q = q.Where(u =>
+                        EF.Functions.Like(u.Name!, pattern)
+                        || EF.Functions.Like(u.UserName!, pattern)
+                    );
                 }
             }
             else
             {
-                q = q.Where(u => EF.Functions.Like(u.Name!, pattern) || EF.Functions.Like(u.UserName!, pattern));
+                q = q.Where(u =>
+                    EF.Functions.Like(u.Name!, pattern) || EF.Functions.Like(u.UserName!, pattern)
+                );
             }
         }
 
         var total = await q.CountAsync(ct);
 
-        var users = await q
-            .OrderBy(u => u.Name)
+        var users = await q.OrderBy(u => u.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -231,6 +246,12 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public async Task UpdateRefreshTokenAsync(RefreshToken token, CancellationToken ct = default)
     {
         db.RefreshTokens.Update(token);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task AddRefreshTokenAsync(RefreshToken token, CancellationToken ct = default)
+    {
+        db.RefreshTokens.Add(token);
         await db.SaveChangesAsync(ct);
     }
 

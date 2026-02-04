@@ -24,6 +24,13 @@ public interface IMarketService
         bool confirmLowLiquidity,
         CancellationToken ct = default
     );
+    Task<MarketResponse> UpdateMarketAsync(
+        Guid marketId,
+        UpdateMarketRequest req,
+        Guid? userId,
+        bool isAdminL2,
+        CancellationToken ct = default
+    );
     Task DeleteMarketAsync(Guid marketId, Guid? userId, CancellationToken ct = default);
     Task<BuyResponse> BuyAsync(
         Guid marketId,

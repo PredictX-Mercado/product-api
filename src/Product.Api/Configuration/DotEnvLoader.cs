@@ -11,9 +11,13 @@ public static class DotEnvLoader
 
         var candidates = new[]
         {
+            ".env.development",
             ".env",
+            Path.Combine("..", ".env.development"),
             Path.Combine("..", ".env"),
+            Path.Combine("..", "..", ".env.development"),
             Path.Combine("..", "..", ".env"),
+            Path.Combine("..", "..", "..", ".env.development"),
             Path.Combine("..", "..", "..", ".env"),
         };
 

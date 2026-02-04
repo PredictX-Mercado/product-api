@@ -9,4 +9,9 @@ public class CreateDepositResponse
     public string Currency { get; set; } = default!;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
+    public long? ProviderPaymentId { get; set; }
+    public string? ExternalReference { get; set; }
+    public string? PixQrCode { get; set; }
+    public string? PixQrCodeBase64 { get; set; }
+    public string? CheckoutUrl { get; set; }
 }

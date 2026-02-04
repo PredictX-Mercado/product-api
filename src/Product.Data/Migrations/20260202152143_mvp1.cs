@@ -160,6 +160,7 @@ namespace Product.Data.Migrations
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
                     OrderId = table.Column<string>(type: "text", nullable: true),
                     Payload = table.Column<string>(type: "text", nullable: false),
+                    PayloadHash = table.Column<string>(type: "text", nullable: true),
                     Headers = table.Column<string>(type: "text", nullable: true),
                     SignatureHeader = table.Column<string>(type: "text", nullable: true),
                     ResponseStatusCode = table.Column<int>(type: "integer", nullable: true),
@@ -189,7 +190,6 @@ namespace Product.Data.Migrations
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
                     ProviderPaymentIdText = table.Column<string>(type: "text", nullable: true),
                     ExpiresAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    Credited = table.Column<bool>(type: "boolean", nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
                     StatusDetail = table.Column<string>(type: "text", nullable: true),
                     PaymentMethod = table.Column<string>(type: "text", nullable: false),
@@ -254,6 +254,15 @@ namespace Product.Data.Migrations
                     Provider = table.Column<string>(type: "text", nullable: true),
                     ProviderPaymentId = table.Column<long>(type: "bigint", nullable: true),
                     ProviderPaymentIdText = table.Column<string>(type: "text", nullable: true),
+                    ExternalPaymentId = table.Column<string>(type: "text", nullable: true),
+                    PaymentIntentId = table.Column<Guid>(type: "uuid", nullable: true),
+                    PaymentMethod = table.Column<string>(type: "text", nullable: true),
+                    PaymentExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    CheckoutUrl = table.Column<string>(type: "text", nullable: true),
+                    MarketId = table.Column<Guid>(type: "uuid", nullable: true),
+                    MarketTitleSnapshot = table.Column<string>(type: "text", nullable: true),
+                    MarketSlugSnapshot = table.Column<string>(type: "text", nullable: true),
+                    Description = table.Column<string>(type: "text", nullable: true),
                     ReferenceType = table.Column<string>(type: "text", nullable: true),
                     ReferenceId = table.Column<Guid>(type: "uuid", nullable: true),
                     PayloadJson = table.Column<string>(type: "text", nullable: true),
@@ -281,6 +290,27 @@ namespace Product.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RiskTerms",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    MarketId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TermVersion = table.Column<string>(type: "text", nullable: false),
+                    TermSnapshot = table.Column<string>(type: "text", nullable: true),
+                    TermHash = table.Column<string>(type: "text", nullable: true),
+                    IpAddress = table.Column<string>(type: "text", nullable: true),
+                    UserAgent = table.Column<string>(type: "text", nullable: true),
+                    AcceptedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RiskTerms", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -420,9 +450,14 @@ namespace Product.Data.Migrations
                     Provider = table.Column<string>(type: "text", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric", nullable: false),
                     Currency = table.Column<string>(type: "text", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
                     ExternalPaymentId = table.Column<string>(type: "text", nullable: true),
+                    ExternalReference = table.Column<string>(type: "text", nullable: true),
                     IdempotencyKey = table.Column<string>(type: "text", nullable: false),
+                    PaymentMethod = table.Column<string>(type: "text", nullable: false),
+                    PixQrCode = table.Column<string>(type: "text", nullable: true),
+                    PixQrCodeBase64 = table.Column<string>(type: "text", nullable: true),
+                    CheckoutUrl = table.Column<string>(type: "text", nullable: true),
                     ExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
@@ -549,7 +584,7 @@ namespace Product.Data.Migrations
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric", nullable: false),
                     Currency = table.Column<string>(type: "text", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
                     ApprovedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     ApprovedByUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     Notes = table.Column<string>(type: "text", nullable: true),
@@ -601,7 +636,7 @@ namespace Product.Data.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AccountId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Type = table.Column<int>(type: "integer", nullable: false),
+                    Type = table.Column<string>(type: "text", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric", nullable: false),
                     ReferenceType = table.Column<string>(type: "text", nullable: true),
                     ReferenceId = table.Column<Guid>(type: "uuid", nullable: true),
@@ -791,6 +826,9 @@ namespace Product.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "RefreshTokens");
+
+            migrationBuilder.DropTable(
+                name: "RiskTerms");
 
             migrationBuilder.DropTable(
                 name: "UserAddresses");

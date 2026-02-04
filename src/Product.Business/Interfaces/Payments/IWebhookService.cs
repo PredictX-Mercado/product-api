@@ -28,4 +28,6 @@ public interface IWebhookService
         int? processingDurationMs = null,
         CancellationToken ct = default
     );
+
+    Task<int> CleanupUnprocessedAsync(int take, CancellationToken ct = default);
 }

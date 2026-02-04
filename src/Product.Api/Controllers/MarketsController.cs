@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -53,10 +54,18 @@ public class MarketsController(IMarketService svc, AppDbContext db) : Controller
         };
 
         var (items, total, curPage, curPageSize) = await _svc.ExploreMarketsAsync(req, ct);
-        return Ok(new { items, total, page = curPage, pageSize = curPageSize });
+        return Ok(
+            new
+            {
+                items,
+                total,
+                page = curPage,
+                pageSize = curPageSize,
+            }
+        );
     }
 
-    [Authorize(Policy = "RequireAdminL1")]
+    [Authorize(Policy = "RequireAdminL2")]
     [HttpPost("create-market")]
     public async Task<IActionResult> CreateAdmin(
         [FromBody] CreateMarketRequest req,
@@ -80,14 +89,13 @@ public class MarketsController(IMarketService svc, AppDbContext db) : Controller
             userId = g;
         var userEmail = User?.FindFirst("email")?.Value;
 
-        var isAdminL2 =
-            (User?.IsInRole("admin_l2") ?? false) || (User?.IsInRole("ADMIN_L2") ?? false);
+        var isAdminL2_L3 = HasAnyRole(User, "admin_l2", "admin_l3");
 
         var created = await _svc.CreateMarketAsync(
             req,
             userId,
             userEmail,
-            isAdminL2,
+            isAdminL2_L3,
             idem,
             confirmLowLiquidity,
             ct
@@ -95,7 +103,29 @@ public class MarketsController(IMarketService svc, AppDbContext db) : Controller
         return CreatedAtAction(nameof(Get), new { marketId = created.Id }, created);
     }
 
-    [Authorize(Policy = "RequireAdminL1")]
+    [Authorize(Policy = "RequireAdminL2")]
+    [HttpPut("{marketId}")]
+    public async Task<IActionResult> UpdateAdmin(
+        Guid marketId,
+        [FromBody] UpdateMarketRequest req,
+        CancellationToken ct
+    )
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        Guid? userId = null;
+        var userIdStr = User?.FindFirst("sub")?.Value;
+        if (Guid.TryParse(userIdStr, out var g))
+            userId = g;
+
+        var isAdminL2_L3 = HasAnyRole(User, "admin_l2", "admin_l3");
+
+        var updated = await _svc.UpdateMarketAsync(marketId, req, userId, isAdminL2_L3, ct);
+        return Ok(updated);
+    }
+
+    [Authorize(Policy = "RequireAdminL2")]
     [HttpDelete("{marketId}")]
     public async Task<IActionResult> DeleteAdmin(Guid marketId, CancellationToken ct)
     {
@@ -179,7 +209,7 @@ public class MarketsController(IMarketService svc, AppDbContext db) : Controller
     {
         var userIdStr =
             User?.FindFirst("sub")?.Value
-            ?? User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User?.FindFirst("id")?.Value;
 
         if (string.IsNullOrWhiteSpace(userIdStr) || !Guid.TryParse(userIdStr, out var uid))
@@ -192,5 +222,13 @@ public class MarketsController(IMarketService svc, AppDbContext db) : Controller
 
         var res = await _svc.BuyAsync(marketId, uid, req.Side, req.Amount, req.IdempotencyKey, ct);
         return Ok(res);
+    }
+
+    private static bool HasAnyRole(ClaimsPrincipal? user, params string[] roles)
+    {
+        if (user == null || roles.Length == 0)
+            return false;
+
+        return roles.Any(r => user.IsInRole(r) || user.IsInRole(r.ToUpperInvariant()));
     }
 }

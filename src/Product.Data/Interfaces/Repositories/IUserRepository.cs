@@ -13,6 +13,7 @@ public interface IUserRepository
         string normalizedEmail,
         CancellationToken ct = default
     );
+    Task<ApplicationUser?> GetUserByIdAsync(Guid userId, CancellationToken ct = default);
     Task<ApplicationUser?> GetUserByEmailAsync(
         string normalizedEmail,
         CancellationToken ct = default
@@ -51,5 +52,6 @@ public interface IUserRepository
     );
     Task UpdateUserAsync(ApplicationUser user, CancellationToken ct = default);
     Task UpdateRefreshTokenAsync(RefreshToken token, CancellationToken ct = default);
+    Task AddRefreshTokenAsync(RefreshToken token, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

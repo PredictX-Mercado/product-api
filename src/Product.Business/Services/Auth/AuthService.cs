@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Google.Apis.Auth;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Product.Business.Interfaces.Auth;
@@ -30,10 +32,12 @@ public class AuthService : IAuthService
     private readonly IRolePromotionService _rolePromotionService;
     private readonly IEmailSender _emailSender;
     private readonly IOptions<FrontendOptions> _frontendOptions;
+    private readonly IOptions<IdentityTokenOptions> _identityTokenOptions;
     private readonly IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> _bearerOptions;
     private readonly IOptions<Product.Business.Options.GoogleAuthOptions> _googleOptions;
     private readonly ILogger<AuthService> _logger;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IMemoryCache _cache;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
@@ -41,11 +45,13 @@ public class AuthService : IAuthService
         IUserRepository userRepository,
         IEmailSender emailSender,
         IOptions<FrontendOptions> frontendOptions,
+        IOptions<IdentityTokenOptions> identityTokenOptions,
         IOptionsMonitor<Microsoft.AspNetCore.Authentication.BearerToken.BearerTokenOptions> bearerOptions,
         IOptions<Product.Business.Options.GoogleAuthOptions> googleOptions,
         ILogger<AuthService> logger,
         IRolePromotionService rolePromotionService,
-        IHttpContextAccessor httpContextAccessor
+        IHttpContextAccessor httpContextAccessor,
+        IMemoryCache cache
     )
     {
         _userManager = userManager;
@@ -53,11 +59,13 @@ public class AuthService : IAuthService
         _userRepository = userRepository;
         _emailSender = emailSender;
         _frontendOptions = frontendOptions;
+        _identityTokenOptions = identityTokenOptions;
         _bearerOptions = bearerOptions;
         _googleOptions = googleOptions;
         _logger = logger;
         _rolePromotionService = rolePromotionService;
         _httpContextAccessor = httpContextAccessor;
+        _cache = cache;
     }
 
     public async Task<ApiResult> SignUpApiAsync(SignupRequest request, CancellationToken ct)
@@ -79,6 +87,22 @@ public class AuthService : IAuthService
             return ApiResult.Ok(null);
 
         var tokens = await CreateBearerTokensAsync(user);
+        // persist refresh token (hash) for session management
+        if (!string.IsNullOrWhiteSpace(tokens.refreshToken))
+        {
+            try
+            {
+                await PersistRefreshTokenAsync(user, tokens.refreshToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to persist refresh token for user {UserId}",
+                    user.Id
+                );
+            }
+        }
         // If client requested cookies, store refresh token in HttpOnly cookie and do not expose it in JSON
         if (useCookies == true && _httpContextAccessor?.HttpContext != null)
         {
@@ -150,10 +174,31 @@ public class AuthService : IAuthService
         return ApiResult.Ok(null);
     }
 
-    public async Task<ApiResult> ConfirmEmailApiAsync(Guid userId, string code, string? newEmail)
+    public async Task<ApiResult> ConfirmEmailApiAsync(string? shortCode)
     {
-        await ConfirmEmailAsync(userId, code, newEmail);
+        if (string.IsNullOrWhiteSpace(shortCode))
+            return ApiResult.Problem(StatusCodes.Status400BadRequest, "invalid_token");
+
+        var payload = ResolveShortConfirm(shortCode);
+        if (payload is null)
+            return ApiResult.Problem(StatusCodes.Status400BadRequest, "invalid_token");
+
+        await ConfirmEmailAsync(payload.UserId, payload.Token, payload.NewEmail);
         return ApiResult.Ok(null);
+    }
+
+    public async Task<string> GetConfirmEmailRedirectAsync(string? shortCode, string? redirect)
+    {
+        var result = await ConfirmEmailApiAsync(shortCode);
+
+        var baseUrl = (_frontendOptions.Value.BaseUrl ?? string.Empty).TrimEnd('/');
+        var targetPath = string.IsNullOrWhiteSpace(redirect)
+            ? result.StatusCode < StatusCodes.Status400BadRequest
+                ? "/email-confirmed"
+                : "/email-confirm-error"
+            : $"/{redirect.TrimStart('/')}";
+
+        return string.IsNullOrWhiteSpace(baseUrl) ? targetPath : $"{baseUrl}{targetPath}";
     }
 
     public async Task<ApiResult> ResendConfirmationEmailApiAsync(
@@ -202,6 +247,22 @@ public class AuthService : IAuthService
                 return ApiResult.Ok(null);
 
             var tokens = await CreateBearerTokensAsync(user);
+            // persist refresh token (hash) for session management
+            if (!string.IsNullOrWhiteSpace(tokens.refreshToken))
+            {
+                try
+                {
+                    await PersistRefreshTokenAsync(user, tokens.refreshToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to persist refresh token for user {UserId}",
+                        user.Id
+                    );
+                }
+            }
             // If client requested cookies, store refresh token in HttpOnly cookie and do not expose it in JSON
             if (useCookies == true && _httpContextAccessor?.HttpContext != null)
             {
@@ -291,6 +352,51 @@ public class AuthService : IAuthService
 
         var expiresIn = (int)options.BearerTokenExpiration.TotalSeconds;
         return (accessToken, refreshToken, expiresIn);
+    }
+
+    private async Task PersistRefreshTokenAsync(ApplicationUser user, string rawRefreshToken)
+    {
+        if (user == null)
+            return;
+        try
+        {
+            // compute SHA256 hash of raw token
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(rawRefreshToken);
+            var hashBytes = sha.ComputeHash(bytes);
+            var hash = BitConverter
+                .ToString(hashBytes)
+                .Replace("-", string.Empty)
+                .ToLowerInvariant();
+
+            var options = _bearerOptions.Get(IdentityConstants.BearerScheme);
+            var expiresAt = DateTimeOffset.UtcNow.Add(options.RefreshTokenExpiration);
+
+            var deviceInfo = string.Empty;
+            try
+            {
+                var ctx = _httpContextAccessor?.HttpContext;
+                if (ctx != null)
+                {
+                    deviceInfo = ctx.Request.Headers["User-Agent"].ToString();
+                }
+            }
+            catch { }
+
+            var refresh = new RefreshToken
+            {
+                UserId = user.Id,
+                TokenHash = hash,
+                ExpiresAt = expiresAt,
+                DeviceInfo = string.IsNullOrWhiteSpace(deviceInfo) ? null : deviceInfo,
+            };
+
+            await _userRepository.AddRefreshTokenAsync(refresh);
+        }
+        catch
+        {
+            // swallow to avoid breaking authentication flow; caller already logs warnings
+        }
     }
 
     public async Task<ApiResult> ForgotPasswordApiAsync(
@@ -870,7 +976,7 @@ public class AuthService : IAuthService
         var resetCode = await _userManager.GeneratePasswordResetTokenAsync(user);
         await _emailSender.SendForgotPasswordAsync(
             user.Email ?? request.Email,
-            user.UserName ?? string.Empty,
+            GetDisplayName(user),
             resetCode,
             ct
         );
@@ -932,7 +1038,7 @@ public class AuthService : IAuthService
 
         await _emailSender.SendResetPasswordConfirmationAsync(
             user.Email ?? request.Email,
-            user.UserName ?? string.Empty,
+            GetDisplayName(user),
             ct
         );
     }
@@ -964,7 +1070,7 @@ public class AuthService : IAuthService
 
         await _emailSender.SendResetPasswordConfirmationAsync(
             user.Email ?? string.Empty,
-            user.UserName ?? string.Empty,
+            GetDisplayName(user),
             ct
         );
     }
@@ -1020,10 +1126,15 @@ public class AuthService : IAuthService
 
             var token = await _userManager.GenerateChangeEmailTokenAsync(user, request.NewEmail);
             var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-            var confirmUrl = BuildConfirmEmailUrl(_frontendOptions.Value.BaseUrl, user.Id, code);
+            var confirmUrl = BuildConfirmEmailUrl(
+                _frontendOptions.Value.BaseUrl,
+                user.Id,
+                code,
+                request.NewEmail
+            );
             await _emailSender.SendChangeEmailAsync(
                 request.NewEmail,
-                user.UserName ?? string.Empty,
+                GetDisplayName(user),
                 confirmUrl,
                 ct
             );
@@ -1134,14 +1245,26 @@ public class AuthService : IAuthService
     }
 
     // Helpers copied from endpoints
-    private static string BuildConfirmEmailUrl(string? baseUrl, Guid userId, string code)
+    private string BuildConfirmEmailUrl(string? baseUrl, Guid userId, string code, string? newEmail)
     {
-        var normalizedBase = string.IsNullOrWhiteSpace(baseUrl)
-            ? string.Empty
-            : baseUrl.TrimEnd('/');
-        return string.IsNullOrWhiteSpace(normalizedBase)
-            ? string.Empty
-            : $"{normalizedBase}/confirm-email/{userId}/{code}";
+        string normalizedBase = string.Empty;
+        var request = _httpContextAccessor?.HttpContext?.Request;
+        if (request?.Host.HasValue == true)
+        {
+            normalizedBase = $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedBase))
+        {
+            normalizedBase = string.IsNullOrWhiteSpace(baseUrl)
+                ? string.Empty
+                : baseUrl.TrimEnd('/');
+        }
+        if (string.IsNullOrWhiteSpace(normalizedBase))
+            return string.Empty;
+
+        var shortCode = CreateShortConfirmCode(userId, code, newEmail);
+        return $"{normalizedBase}/confirm-email/{shortCode}";
     }
 
     private static string NormalizeEmail(string email) =>
@@ -1185,19 +1308,58 @@ public class AuthService : IAuthService
         return new string(buffer[..idx]).Normalize(NormalizationForm.FormC);
     }
 
+    private sealed record ConfirmLinkPayload(Guid UserId, string Token, string? NewEmail);
+
+    private string CreateShortConfirmCode(Guid userId, string token, string? newEmail)
+    {
+        // Use 32 random bytes (base64url) to reduce collision risk and keep it URL-safe
+        var shortCode = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var ttlHours = Math.Max(
+            1,
+            _identityTokenOptions.Value.EmailConfirmationTokenExpirationInHours
+        );
+        var key = $"confirm:{shortCode}";
+        _cache.Set(
+            key,
+            new ConfirmLinkPayload(userId, token, newEmail),
+            TimeSpan.FromHours(ttlHours)
+        );
+        return shortCode;
+    }
+
+    private ConfirmLinkPayload? ResolveShortConfirm(string shortCode)
+    {
+        var key = $"confirm:{shortCode}";
+        if (_cache.TryGetValue<ConfirmLinkPayload>(key, out var payload))
+        {
+            _cache.Remove(key); // one-time use
+            return payload;
+        }
+
+        return null;
+    }
+
     // Role management via Identity is disabled; roles are stored in the user's `Role` string.
 
     private async Task SendConfirmationEmailAsync(ApplicationUser user, CancellationToken ct)
     {
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var confirmUrl = BuildConfirmEmailUrl(_frontendOptions.Value.BaseUrl, user.Id, code);
+        var confirmUrl = BuildConfirmEmailUrl(_frontendOptions.Value.BaseUrl, user.Id, code, null);
         await _emailSender.SendEmailVerificationAsync(
             user.Email ?? string.Empty,
-            user.UserName ?? string.Empty,
+            GetDisplayName(user),
             confirmUrl,
             ct
         );
+    }
+
+    private static string GetDisplayName(ApplicationUser? user)
+    {
+        if (user is null)
+            return string.Empty;
+
+        return string.IsNullOrWhiteSpace(user.Name) ? user.UserName ?? string.Empty : user.Name;
     }
 
     private async Task<SignInResult> HandleTwoFactorAsync(LoginRequest request, bool isPersistent)

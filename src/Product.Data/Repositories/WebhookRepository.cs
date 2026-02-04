@@ -24,9 +24,30 @@ public class WebhookRepository(AppDbContext db) : IWebhookRepository
         );
     }
 
+    public async Task<MPWebhookEvent?> GetByPayloadHashAsync(
+        string payloadHash,
+        CancellationToken ct = default
+    )
+    {
+        return await db.MPWebhookEvent.FirstOrDefaultAsync(w => w.PayloadHash == payloadHash, ct);
+    }
+
     public async Task<MPWebhookEvent?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await db.MPWebhookEvent.FindAsync(new object[] { id }, ct);
+    }
+
+    public async Task<List<MPWebhookEvent>> GetUnprocessedAsync(
+        int take,
+        CancellationToken ct = default
+    )
+    {
+        return await db
+            .MPWebhookEvent.Where(w => !w.Processed)
+            .OrderBy(w => w.ReceivedAt)
+            .ThenBy(w => w.Id)
+            .Take(take)
+            .ToListAsync(ct);
     }
 
     public async Task UpdateAsync(MPWebhookEvent webhookEvent, CancellationToken ct = default)

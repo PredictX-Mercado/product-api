@@ -50,7 +50,6 @@ public class OrderService : IOrderService
                 StatusDetail = statusDetail,
                 PaymentMethod = paymentMethod,
                 ExpiresAtUtc = expiresAt?.ToUniversalTime(),
-                Credited = false,
             };
             await _orderRepository.AddAsync(ord, ct);
             return ord;

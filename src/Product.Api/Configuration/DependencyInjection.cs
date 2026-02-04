@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddHttpClient();
         services.AddSignalR();
+        services.AddMemoryCache();
 
         services.AddFluentValidationAutoValidation();
         services.AddValidatorsFromAssembly(typeof(SignupRequestValidator).Assembly);
@@ -89,7 +90,11 @@ public static class DependencyInjection
             configuration.GetSection(GoogleAuthOptions.SectionName)
         );
         services.Configure<FrontendOptions>(configuration.GetSection(FrontendOptions.SectionName));
+        services.Configure<RiskTermsCompanyOptions>(
+            configuration.GetSection(RiskTermsCompanyOptions.SectionName)
+        );
         services.Configure<MercadoPagoOptions>(configuration);
+        services.Configure<MaintenanceOptions>(configuration.GetSection("Maintenance"));
 
         services.Configure<DataProtectionTokenProviderOptions>(options =>
         {
@@ -123,6 +128,7 @@ public static class DependencyInjection
 
     public static IServiceCollection AddApiAppServices(this IServiceCollection services)
     {
+        services.AddSingleton<IRiskTermsTemplateRepository, FileRiskTermsTemplateRepository>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IEmailQueue, PersistentEmailQueue>();
         services.AddScoped<IEmailService, EmailService>();
@@ -135,6 +141,7 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IWalletService, WalletService>();
+        services.AddScoped<IReceiptService, ReceiptService>();
         services.AddScoped<IPaymentMethodService, PaymentMethodService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IWebhookService, WebhookService>();
@@ -151,7 +158,10 @@ public static class DependencyInjection
         services.AddScoped<IWalletRepository, WalletRepository>();
         services.AddScoped<IDbMigrationRepository, DbMigrationRepository>();
         services.AddScoped<IMarketRepository, MarketRepository>();
+        services.AddScoped<IRiskTermsRepository, RiskTermsRepository>();
         services.AddScoped<IMarketService, MarketService>();
+        services.AddScoped<IRiskTermsService, RiskTermsService>();
+        services.AddScoped<IRiskTermsPdfGenerator, RiskTermsPdfGenerator>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IMarketNotifier, MarketNotifier>();
         services.AddScoped<IRolePromotionService, RolePromotionService>();
@@ -161,6 +171,7 @@ public static class DependencyInjection
         >();
 
         services.AddHostedService<PersistentEmailBackgroundService>();
+        services.AddHostedService<MaintenanceBackgroundService>();
 
         return services;
     }

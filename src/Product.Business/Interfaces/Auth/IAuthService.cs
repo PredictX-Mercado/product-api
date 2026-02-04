@@ -14,7 +14,8 @@ public interface IAuthService
     );
     Task<ApiResult> SignOutApiAsync();
     Task<ApiResult> RefreshApiAsync(RefreshRequest request);
-    Task<ApiResult> ConfirmEmailApiAsync(Guid userId, string code, string? newEmail);
+    Task<ApiResult> ConfirmEmailApiAsync(string? shortCode);
+    Task<string> GetConfirmEmailRedirectAsync(string? shortCode, string? redirect);
     Task<ApiResult> ResendConfirmationEmailApiAsync(
         ResendConfirmationEmailRequest request,
         CancellationToken ct

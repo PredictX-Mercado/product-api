@@ -13,8 +13,10 @@ public class WebhookEventConfiguration : IEntityTypeConfiguration<MPWebhookEvent
         builder.Property(e => e.Provider).IsRequired().HasMaxLength(100);
         builder.Property(e => e.EventType).IsRequired().HasMaxLength(100);
         builder.Property(e => e.Payload).IsRequired();
+        builder.Property(e => e.PayloadHash).HasMaxLength(128);
         builder.Property(e => e.Headers).HasMaxLength(2000);
 
         builder.HasIndex(e => e.ProviderPaymentId);
+        builder.HasIndex(e => e.PayloadHash).IsUnique();
     }
 }
