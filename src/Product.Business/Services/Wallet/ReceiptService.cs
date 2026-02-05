@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Product.Business.Interfaces.Results;
 using Product.Business.Interfaces.Wallet;
+using Product.Common.Enums;
 using Product.Contracts.Wallet;
 using Product.Data.Interfaces.Repositories;
 using Product.Data.Models.Markets;
@@ -122,6 +123,18 @@ public partial class ReceiptService : IReceiptService
         return ServiceResult<ReceiptItem>.Ok(item);
     }
 
+    public async Task<bool> EnsureDepositReceiptAsync(
+        Guid paymentIntentId,
+        CancellationToken ct = default
+    )
+    {
+        var intent = await _walletRepository.GetPaymentIntentByIdAsync(paymentIntentId, ct);
+        if (intent is null)
+            return false;
+
+        return await EnsureDepositReceiptAsync(intent, "ensure", ct);
+    }
+
     public async Task<int> BackfillDepositReceiptsAsync(
         int take = 100,
         CancellationToken ct = default
@@ -134,41 +147,8 @@ public partial class ReceiptService : IReceiptService
         var created = 0;
         foreach (var intent in intents)
         {
-            var ledger = await _walletRepository.GetLedgerEntryByReferenceAsync(
-                "PaymentIntent",
-                intent.Id,
-                ct
-            );
-            var targetReferenceId = ledger?.Id ?? intent.Id;
-            if (await _walletRepository.ReceiptExistsForReferenceAsync(targetReferenceId, ct))
-            {
-                continue;
-            }
-
-            var receipt = new Receipt
-            {
-                Id = Guid.NewGuid(),
-                UserId = intent.UserId,
-                Type = "deposit",
-                Amount = intent.Amount,
-                Currency = intent.Currency,
-                Provider = intent.Provider,
-                PaymentIntentId = intent.Id,
-                PaymentMethod = intent.PaymentMethod,
-                PaymentExpiresAt = intent.ExpiresAt,
-                CheckoutUrl = intent.CheckoutUrl,
-                ExternalPaymentId = intent.ExternalPaymentId,
-                Description = $"Depósito via {intent.Provider}",
-                ProviderPaymentId = long.TryParse(intent.ExternalPaymentId, out var pid)
-                    ? pid
-                    : null,
-                ProviderPaymentIdText = intent.ExternalPaymentId,
-                ReferenceType = ledger is not null ? "LedgerEntry" : "PaymentIntent",
-                ReferenceId = targetReferenceId,
-                PayloadJson = JsonSerializer.Serialize(new { intent, note = "backfill" }),
-            };
-            await _walletRepository.AddReceiptAsync(receipt, ct);
-            created++;
+            if (await EnsureDepositReceiptAsync(intent, "backfill", ct))
+                created++;
         }
         return created;
     }
@@ -533,6 +513,75 @@ public partial class ReceiptService : IReceiptService
         }
 
         return null;
+    }
+
+    private async Task<bool> EnsureDepositReceiptAsync(
+        PaymentIntent intent,
+        string note,
+        CancellationToken ct
+    )
+    {
+        if (intent.Status != PaymentIntentStatus.APPROVED)
+            return false;
+
+        var ledger = await _walletRepository.GetLedgerEntryByReferenceAsync(
+            "PaymentIntent",
+            intent.Id,
+            ct
+        );
+
+        if (await HasDepositReceiptAsync(intent.Id, ledger?.Id, ct))
+            return false;
+
+        var receipt = BuildDepositReceipt(intent, ledger, note);
+        await _walletRepository.AddReceiptAsync(receipt, ct);
+        return true;
+    }
+
+    private async Task<bool> HasDepositReceiptAsync(
+        Guid intentId,
+        Guid? ledgerId,
+        CancellationToken ct
+    )
+    {
+        if (await _walletRepository.ReceiptExistsForReferenceAsync(intentId, ct))
+            return true;
+        if (
+            ledgerId.HasValue
+            && await _walletRepository.ReceiptExistsForReferenceAsync(ledgerId.Value, ct)
+        )
+            return true;
+        return false;
+    }
+
+    private static Receipt BuildDepositReceipt(
+        PaymentIntent intent,
+        LedgerEntry? ledger,
+        string note
+    )
+    {
+        var targetReferenceId = ledger?.Id ?? intent.Id;
+
+        return new Receipt
+        {
+            Id = Guid.NewGuid(),
+            UserId = intent.UserId,
+            Type = "deposit",
+            Amount = intent.Amount,
+            Currency = intent.Currency,
+            Provider = intent.Provider,
+            PaymentIntentId = intent.Id,
+            PaymentMethod = intent.PaymentMethod,
+            PaymentExpiresAt = intent.ExpiresAt,
+            CheckoutUrl = intent.CheckoutUrl,
+            ExternalPaymentId = intent.ExternalPaymentId,
+            Description = $"Depósito via {intent.Provider}",
+            ProviderPaymentId = long.TryParse(intent.ExternalPaymentId, out var pid) ? pid : null,
+            ProviderPaymentIdText = intent.ExternalPaymentId,
+            ReferenceType = ledger is not null ? "LedgerEntry" : "PaymentIntent",
+            ReferenceId = targetReferenceId,
+            PayloadJson = JsonSerializer.Serialize(new { intent, note }),
+        };
     }
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId)

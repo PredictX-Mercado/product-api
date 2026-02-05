@@ -22,16 +22,19 @@ public class WalletService : IWalletService
     private readonly IWalletRepository _walletRepository;
     private readonly IMercadoPagoService _mercadoPagoService;
     private readonly IUserRepository _userRepository;
+    private readonly IReceiptService _receiptService;
 
     public WalletService(
         IWalletRepository walletRepository,
         IMercadoPagoService mercadoPagoService,
-        IUserRepository userRepository
+        IUserRepository userRepository,
+        IReceiptService receiptService
     )
     {
         _walletRepository = walletRepository;
         _mercadoPagoService = mercadoPagoService;
         _userRepository = userRepository;
+        _receiptService = receiptService;
     }
 
     public async Task<ApiResult> GetBalancesApiAsync(
@@ -249,6 +252,7 @@ public class WalletService : IWalletService
 
         if (intent.Status == PaymentIntentStatus.APPROVED)
         {
+            await _receiptService.EnsureDepositReceiptAsync(intent.Id, ct);
             return ServiceResult<bool>.Ok(true); // idempotent
         }
 
@@ -270,28 +274,7 @@ public class WalletService : IWalletService
         intent.ExternalPaymentId ??= providerPaymentId;
 
         await _walletRepository.AddLedgerEntryAsync(entry, ct);
-
-        var receipt = new Receipt
-        {
-            Id = Guid.NewGuid(),
-            UserId = intent.UserId,
-            Type = "deposit",
-            Amount = entry.Amount,
-            Currency = intent.Currency,
-            Provider = intent.Provider,
-            PaymentIntentId = intent.Id,
-            PaymentMethod = intent.PaymentMethod,
-            PaymentExpiresAt = intent.ExpiresAt,
-            CheckoutUrl = intent.CheckoutUrl,
-            ExternalPaymentId = intent.ExternalPaymentId,
-            Description = $"Depósito via {intent.Provider}",
-            ProviderPaymentIdText = intent.ExternalPaymentId,
-            ProviderPaymentId = long.TryParse(intent.ExternalPaymentId, out var pid2) ? pid2 : null,
-            ReferenceType = "LedgerEntry",
-            ReferenceId = entry.Id,
-            PayloadJson = JsonSerializer.Serialize(new { intent, ledgerEntry = entry }),
-        };
-        await _walletRepository.AddReceiptAsync(receipt, ct);
+        await _receiptService.EnsureDepositReceiptAsync(intent.Id, ct);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -347,12 +330,14 @@ public class WalletService : IWalletService
         }
 
         var mappedStatus = MapMpStatusToIntentStatus(providerStatus, providerStatusDetail);
-        if (mappedStatus == PaymentIntentStatus.APPROVED)
+        var isCredited = IsCredited(providerStatus, providerStatusDetail);
+        if (mappedStatus == PaymentIntentStatus.APPROVED || isCredited)
         {
             if (intent.Status == PaymentIntentStatus.APPROVED)
             {
                 if (amountAdjusted)
                     await _walletRepository.UpdatePaymentIntentAsync(intent, ct);
+                await _receiptService.EnsureDepositReceiptAsync(intent.Id, ct);
                 return ServiceResult<bool>.Ok(true);
             }
 
@@ -830,6 +815,28 @@ public class WalletService : IWalletService
             "expired" => PaymentIntentStatus.EXPIRED,
             _ => null,
         };
+    }
+
+    private static bool IsCredited(string? status, string? statusDetail)
+    {
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var normalized = status.Trim().ToLowerInvariant();
+            if (normalized is "approved" or "paid" or "processed" or "authorized")
+                return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(statusDetail))
+        {
+            var sd = statusDetail.Trim().ToLowerInvariant();
+            return sd.Contains("accredit")
+                || sd.Contains("credited")
+                || sd.Contains("paid")
+                || sd.Contains("accredited")
+                || sd.Contains("settled");
+        }
+
+        return false;
     }
 
     private static CreateDepositResponse MapDeposit(PaymentIntent intent) =>

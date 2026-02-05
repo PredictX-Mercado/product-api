@@ -32,6 +32,8 @@ public interface IReceiptService
         CancellationToken ct = default
     );
 
+    Task<bool> EnsureDepositReceiptAsync(Guid paymentIntentId, CancellationToken ct = default);
+
     Task<int> BackfillDepositReceiptsAsync(int take = 100, CancellationToken ct = default);
     Task<int> BackfillBuyReceiptsAsync(int take = 100, CancellationToken ct = default);
 }
