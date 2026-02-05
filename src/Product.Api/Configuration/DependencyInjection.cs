@@ -2,12 +2,12 @@ using System.Net;
 using System.Net.Mail;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Product.Api.Serialization;
 using Product.Api.Services;
 using Product.Business.BackgroundServices;
-using Product.Business.Interfaces;
 using Product.Business.Interfaces.Audit;
 using Product.Business.Interfaces.Auth;
 using Product.Business.Interfaces.Categories;
@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddApiAppServices();
         services.AddApiSwagger();
         services.AddApiCors(configuration);
+        services.AddApiCookiePolicy();
         services.AddApiEmail(configuration);
         services.AddApiAuth(configuration);
         services.AddApiDb(configuration);
@@ -122,6 +123,21 @@ public static class DependencyInjection
                 );
             }
         );
+
+        return services;
+    }
+
+    public static IServiceCollection AddApiCookiePolicy(this IServiceCollection services)
+    {
+        services.Configure<CookiePolicyOptions>(options =>
+        {
+            options.MinimumSameSitePolicy = SameSiteMode.None;
+            options.Secure = CookieSecurePolicy.Always;
+            options.HttpOnly = HttpOnlyPolicy.Always;
+
+            options.OnAppendCookie = context => ApplyCrossSiteCookiePolicy(context.CookieOptions);
+            options.OnDeleteCookie = context => ApplyCrossSiteCookiePolicy(context.CookieOptions);
+        });
 
         return services;
     }
@@ -322,5 +338,12 @@ public static class DependencyInjection
         services.AddHealthChecks();
 
         return services;
+    }
+
+    private static void ApplyCrossSiteCookiePolicy(CookieOptions options)
+    {
+        options.SameSite = SameSiteMode.None;
+        options.Secure = true;
+        options.HttpOnly = true;
     }
 }
